@@ -1,0 +1,19 @@
+{
+  "name": "@jecrc/gmail",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@jecrc/config": "workspace:*",
+    "@jecrc/database": "workspace:*",
+    "@jecrc/observability": "workspace:*",
+    "google-auth-library": "^9.15.1",
+    "googleapis": "^144.0.0"
+  }
+}

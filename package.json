@@ -1,0 +1,38 @@
+{
+  "name": "jecrc-mail-priority-sync",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@10.13.1",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "scripts": {
+    "build": "npx --yes pnpm@10.13.1 -r --if-present build",
+    "dev": "npx --yes pnpm@10.13.1 --parallel --filter @jecrc/api --filter @jecrc/worker --filter @jecrc/web dev",
+    "dev:api": "npx --yes pnpm@10.13.1 --filter @jecrc/api dev",
+    "dev:worker": "npx --yes pnpm@10.13.1 --filter @jecrc/worker dev",
+    "dev:web": "npx --yes pnpm@10.13.1 --filter @jecrc/web dev",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "typecheck": "npx --yes pnpm@10.13.1 -r --if-present typecheck",
+    "infra:up": "docker compose up -d postgres redis",
+    "infra:down": "docker compose down",
+    "check:postgres": "npx --yes pnpm@10.13.1 --filter @jecrc/database check:postgres",
+    "check:redis": "npx --yes pnpm@10.13.1 --filter @jecrc/queue check:redis",
+    "check:connections": "npm run check:postgres && npm run check:redis",
+    "prisma:generate": "npx --yes pnpm@10.13.1 --filter @jecrc/database prisma:generate"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.31.0",
+    "@types/node": "^22.16.5",
+    "eslint": "^9.31.0",
+    "globals": "^16.3.0",
+    "prettier": "^3.6.2",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.38.0",
+    "vitest": "^3.2.4"
+  }
+}

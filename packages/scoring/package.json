@@ -1,0 +1,24 @@
+{
+  "name": "@jecrc/scoring",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "seed:rules": "tsx src/seed-rules.ts"
+  },
+  "dependencies": {
+    "@jecrc/config": "workspace:*",
+    "@jecrc/database": "workspace:*",
+    "@jecrc/observability": "workspace:*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.16.5",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3",
+    "vitest": "^3.2.4"
+  }
+}

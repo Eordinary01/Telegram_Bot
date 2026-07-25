@@ -1,0 +1,25 @@
+{
+  "name": "@jecrc/database",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "prisma:generate": "prisma generate",
+    "db:push": "tsx -e \"process.env.DATABASE_URL=process.env.DATABASE_URL||'postgresql://jecrc:jecrc_dev_password@localhost:5433/jecrc_mail?schema=public'; import('child_process').then(cp => cp.execSync('npx prisma db push', { stdio: 'inherit', env: process.env }))\"",
+    "check:postgres": "tsx src/check-postgres.ts"
+  },
+  "dependencies": {
+    "@jecrc/config": "workspace:*",
+    "@prisma/client": "^6.12.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.16.5",
+    "prisma": "^6.12.0",
+    "tsx": "^4.20.3",
+    "typescript": "^5.8.3"
+  }
+}

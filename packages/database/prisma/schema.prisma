@@ -1,0 +1,146 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  gmailTokens       GmailToken[]
+  watchRegistration WatchRegistration?
+  syncState         SyncState?
+  emails            Email[]
+  senderRules       SenderRule[]
+  keywordRules      KeywordRule[]
+  telegramLink      TelegramLink?
+
+  @@map("users")
+}
+
+model GmailToken {
+  id                  String   @id @default(uuid())
+  userId              String   @map("user_id")
+  encryptedRefreshToken String @map("encrypted_refresh_token")
+  encryptionIv        String   @map("encryption_iv")
+  encryptionAuthTag   String   @map("encryption_auth_tag")
+  scope               String
+  expiresAt           DateTime?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId])
+  @@map("gmail_tokens")
+}
+
+model WatchRegistration {
+  id         String   @id @default(uuid())
+  userId     String   @unique @map("user_id")
+  historyId  String   @map("history_id")
+  expiration DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([expiration])
+  @@map("watch_registrations")
+}
+
+model SyncState {
+  id              String   @id @default(uuid())
+  userId          String   @unique @map("user_id")
+  lastHistoryId   String   @map("last_history_id")
+  lastSyncAt      DateTime @map("last_sync_at")
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sync_states")
+}
+
+model Email {
+  id              String   @id @default(uuid())
+  userId          String   @map("user_id")
+  messageId       String   @map("message_id")
+  threadId        String   @map("thread_id")
+  historyId       String   @map("history_id")
+  from            String
+  subject         String
+  snippet         String?
+  receivedAt      DateTime @map("received_at")
+  isUnread        Boolean  @default(true) @map("is_unread")
+  labels          String[]
+  senderDomain    String?  @map("sender_domain")
+  priorityScore   Int      @default(0) @map("priority_score")
+  priorityLabel   String?  @map("priority_label")
+  priorityReasons String[] @map("priority_reasons")
+  createdAt       DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, messageId])
+  @@index([userId, receivedAt])
+  @@index([userId, isUnread])
+  @@index([userId, priorityScore])
+  @@map("emails")
+}
+
+model SenderRule {
+  id        String   @id @default(uuid())
+  userId    String?  @map("user_id")
+  domain    String
+  label     String
+  weight    Int
+  isActive  Boolean  @default(true) @map("is_active")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([domain])
+  @@map("sender_rules")
+}
+
+model KeywordRule {
+  id         String   @id @default(uuid())
+  userId     String?  @map("user_id")
+  keyword    String
+  weight     Int
+  category   String?
+  matchField String   @default("subject") @map("match_field")
+  isActive   Boolean  @default(true) @map("is_active")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([keyword])
+  @@map("keyword_rules")
+}
+
+model TelegramLink {
+  id                  String    @id @default(uuid())
+  userId              String    @unique @map("user_id")
+  chatId              String?   @unique @map("chat_id")
+  linkingCode         String?   @map("linking_code")
+  linkingCodeExpiresAt DateTime? @map("linking_code_expires_at")
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("telegram_links")
+}
