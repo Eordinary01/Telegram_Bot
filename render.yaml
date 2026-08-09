@@ -1,0 +1,69 @@
+services:
+  - type: web
+    name: jecrc-mail-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /health/live
+    envVars:
+      - key: SERVICE
+        value: api
+      - key: NODE_ENV
+        value: production
+      - key: API_HOST
+        value: 0.0.0.0
+      - key: API_PORT
+        value: 3000
+      - key: ALLOWED_SENDER_DOMAIN
+        value: jecrcu.edu.in
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 24h
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
+      - key: WEB_ORIGIN
+        sync: false
+
+  - type: worker
+    name: jecrc-mail-worker
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    envVars:
+      - key: SERVICE
+        value: worker
+      - key: NODE_ENV
+        value: production
+      - key: ALLOWED_SENDER_DOMAIN
+        value: jecrcu.edu.in
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: GOOGLE_CLIENT_ID
+        sync: false
+      - key: GOOGLE_CLIENT_SECRET
+        sync: false
+      - key: GOOGLE_REDIRECT_URI
+        sync: false
+      - key: ENCRYPTION_KEY
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: JWT_EXPIRES_IN
+        value: 24h
+      - key: TELEGRAM_BOT_TOKEN
+        sync: false
