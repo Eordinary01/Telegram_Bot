@@ -40,6 +40,21 @@ export async function createOrUpdateUserFromOAuth(
   // Get user info from Google
   const userInfo = await getUserInfo(tokenResult.accessToken);
 
+  // Validate user account domain against ALLOWED_SENDER_DOMAIN
+  if (config.ALLOWED_SENDER_DOMAIN) {
+    const emailLower = userInfo.email.toLowerCase();
+    const domainLower = config.ALLOWED_SENDER_DOMAIN.toLowerCase().replace(/^@/, '');
+    if (!emailLower.endsWith(`@${domainLower}`)) {
+      logger.warn(
+        { email: userInfo.email, allowedDomain: config.ALLOWED_SENDER_DOMAIN },
+        'Google OAuth login rejected: user email domain not allowed',
+      );
+      throw new Error(
+        `DOMAIN_RESTRICTED:Only Google accounts ending with @${domainLower} are permitted to sign in.`,
+      );
+    }
+  }
+
   // Encrypt refresh token
   const encryptedData = encrypt(tokenResult.refreshToken, config.ENCRYPTION_KEY);
 

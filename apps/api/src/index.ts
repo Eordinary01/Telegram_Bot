@@ -6,7 +6,7 @@ import { checkPostgresConnection, disconnectPostgres, getPrismaClient } from '@j
 import { createLogger } from '@jecrc/observability';
 import { checkRedisConnection, disconnectRedis, QueueNames } from '@jecrc/queue';
 import { Queue } from 'bullmq';
-import type { SyncUserEmailsJob } from '@jecrc/queue';
+import type { SyncUserEmailsJob, RescanEmailsJob } from '@jecrc/queue';
 import { configureBot, startBot, stopBot } from '@jecrc/telegram';
 
 import { createApp } from './app.js';
@@ -26,6 +26,14 @@ const emailSyncQueue = new Queue<SyncUserEmailsJob>(QueueNames.EMAIL_SYNC, {
   },
 });
 
+// Create BullMQ queue for re-scoring existing emails after rule changes
+const emailRescanQueue = new Queue<RescanEmailsJob>(QueueNames.EMAIL_RESCAN, {
+  connection: {
+    host: new URL(config.REDIS_URL).hostname,
+    port: parseInt(new URL(config.REDIS_URL).port || '6379', 10),
+  },
+});
+
 const app = createApp({
   prisma,
   config,
@@ -33,6 +41,7 @@ const app = createApp({
   checkRedis: () => checkRedisConnection(config.REDIS_URL),
   webOrigin: config.WEB_ORIGIN,
   emailSyncQueue,
+  emailRescanQueue,
 });
 
 // --- Telegram Bot Setup ---
@@ -85,7 +94,12 @@ function shutdown(signal: string): void {
         await stopBot(telegrafBot);
       }
 
-      await Promise.all([disconnectPostgres(), disconnectRedis(), emailSyncQueue.close()]);
+      await Promise.all([
+        disconnectPostgres(),
+        disconnectRedis(),
+        emailSyncQueue.close(),
+        emailRescanQueue.close(),
+      ]);
       if (error) {
         logger.error({ err: error }, 'API server shutdown failed');
         process.exitCode = 1;

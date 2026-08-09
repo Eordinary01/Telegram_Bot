@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any */
 import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
-import type { Queue } from 'bullmq';
 
 import { createApp } from '../src/app.js';
+import { createTestToken, makeTestDeps } from './helpers.js';
 
 const mockPrisma = {
   email: {
@@ -15,36 +15,16 @@ const mockPrisma = {
   },
 } as any;
 
-const mockConfig = {
-  GOOGLE_CLIENT_ID: 'test-client-id',
-  GOOGLE_CLIENT_SECRET: 'test-secret',
-  GOOGLE_REDIRECT_URI: 'http://localhost:3000/auth/google/callback',
-  ENCRYPTION_KEY: Buffer.from('a'.repeat(32)).toString('base64'),
-} as any;
-
-const mockQueue = {
-  add: vi.fn(),
-  close: vi.fn(),
-} as any;
-
 describe('emails endpoints', () => {
-  it('rejects request without userId', async () => {
-    const app = createApp({
-      prisma: mockPrisma,
-      config: mockConfig,
-      checkPostgres: vi.fn(),
-      checkRedis: vi.fn(),
-      webOrigin: 'http://localhost:5173',
-      emailSyncQueue: mockQueue as Queue,
-    });
+  it('rejects request without a valid token', async () => {
+    const app = createApp(makeTestDeps({ prisma: mockPrisma }));
 
     const response = await request(app).get('/emails');
 
-    expect(response.status).toBe(400);
-    expect(response.body).toEqual({ error: 'Missing or invalid userId parameter' });
+    expect(response.status).toBe(401);
   });
 
-  it('fetches email list for a user', async () => {
+  it('fetches email list for the authenticated user', async () => {
     const mockEmails = [
       {
         id: '1',
@@ -61,16 +41,12 @@ describe('emails endpoints', () => {
     mockPrisma.email.findMany.mockResolvedValue(mockEmails);
     mockPrisma.email.count.mockResolvedValue(1);
 
-    const app = createApp({
-      prisma: mockPrisma,
-      config: mockConfig,
-      checkPostgres: vi.fn(),
-      checkRedis: vi.fn(),
-      webOrigin: 'http://localhost:5173',
-      emailSyncQueue: mockQueue as Queue,
-    });
+    const app = createApp(makeTestDeps({ prisma: mockPrisma }));
+    const token = createTestToken('user-1');
 
-    const response = await request(app).get('/emails?userId=user-1&priority=HIGH');
+    const response = await request(app)
+      .get('/emails?priority=HIGH')
+      .set('Authorization', `Bearer ${token}`);
 
     expect(response.status).toBe(200);
     expect(response.body.emails).toHaveLength(1);
@@ -81,25 +57,22 @@ describe('emails endpoints', () => {
   it('returns email stats counts', async () => {
     mockPrisma.email.count
       .mockResolvedValueOnce(10) // total
-      .mockResolvedValueOnce(3)  // high
-      .mockResolvedValueOnce(5)  // medium
-      .mockResolvedValueOnce(2)  // low
-      .mockResolvedValueOnce(4); // unread
+      .mockResolvedValueOnce(3) // high
+      .mockResolvedValueOnce(5) // medium
+      .mockResolvedValueOnce(2) // low
+      .mockResolvedValueOnce(4) // unread
+      .mockResolvedValueOnce(1); // actionRequired
 
     mockPrisma.syncState.findUnique.mockResolvedValue({
       lastSyncAt: new Date('2026-07-25T12:00:00Z'),
     });
 
-    const app = createApp({
-      prisma: mockPrisma,
-      config: mockConfig,
-      checkPostgres: vi.fn(),
-      checkRedis: vi.fn(),
-      webOrigin: 'http://localhost:5173',
-      emailSyncQueue: mockQueue as Queue,
-    });
+    const app = createApp(makeTestDeps({ prisma: mockPrisma }));
+    const token = createTestToken('user-1');
 
-    const response = await request(app).get('/emails/stats?userId=user-1');
+    const response = await request(app)
+      .get('/emails/stats')
+      .set('Authorization', `Bearer ${token}`);
 
     expect(response.status).toBe(200);
     expect(response.body).toEqual({
@@ -108,6 +81,7 @@ describe('emails endpoints', () => {
       medium: 5,
       low: 2,
       unread: 4,
+      actionRequired: 1,
       lastSyncAt: '2026-07-25T12:00:00.000Z',
     });
   });

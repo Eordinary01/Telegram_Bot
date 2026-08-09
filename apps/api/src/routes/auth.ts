@@ -1,9 +1,14 @@
 import { Router } from 'express';
-import type { Request, Response } from 'express';
+import type { Request, Response, NextFunction, RequestHandler } from 'express';
 import type { PrismaClient } from '@jecrc/database';
 import type { AppConfig } from '@jecrc/config';
 import { getLogger } from '@jecrc/observability';
-import { createOAuth2Client, getAuthorizationUrl, createOrUpdateUserFromOAuth } from '@jecrc/auth';
+import {
+  createOAuth2Client,
+  getAuthorizationUrl,
+  createOrUpdateUserFromOAuth,
+  signAuthToken,
+} from '@jecrc/auth';
 import { registerWatch, storeWatchRegistration } from '@jecrc/gmail';
 
 const logger = getLogger('auth-routes');
@@ -11,11 +16,12 @@ const logger = getLogger('auth-routes');
 interface AuthDependencies {
   prisma: PrismaClient;
   config: AppConfig;
+  requireAuth?: RequestHandler;
 }
 
 export function createAuthRouter(dependencies: AuthDependencies): Router {
   const router = Router();
-  const { prisma, config } = dependencies;
+  const { prisma, config, requireAuth } = dependencies;
 
   /**
    * GET /auth/google
@@ -76,6 +82,9 @@ export function createAuthRouter(dependencies: AuthDependencies): Router {
       // Exchange code for tokens and create/update user
       const { user, accessToken } = await createOrUpdateUserFromOAuth(prisma, config, code);
 
+      // Sign a stateless JWT for dashboard/API authentication
+      const token = signAuthToken(user.id, config.JWT_SECRET, config.JWT_EXPIRES_IN);
+
       logger.info({ userId: user.id, email: user.email }, 'User connected Gmail successfully');
 
       // Register Gmail watch for push notifications (or get initial historyId)
@@ -93,19 +102,20 @@ export function createAuthRouter(dependencies: AuthDependencies): Router {
       }
 
       // Return success page with redirect to Web Dashboard
+      const dashboardUrl = `${config.WEB_ORIGIN}?token=${encodeURIComponent(token)}`;
       res.status(200).send(`
         <!DOCTYPE html>
         <html>
           <head>
             <title>Success</title>
-            <meta http-equiv="refresh" content="2;url=${config.WEB_ORIGIN}?userId=${user.id}" />
+            <meta http-equiv="refresh" content="2;url=${dashboardUrl}" />
           </head>
           <body style="font-family: sans-serif; text-align: center; padding: 50px; background: #090d16; color: #f1f5f9;">
             <h1 style="color: #4ade80;">✅ Gmail Connected Successfully!</h1>
             <p style="font-size: 18px;">Welcome, ${user.name || user.email}</p>
             <p style="color: #94a3b8;">Your Gmail is now connected. Redirecting you to your priority dashboard...</p>
             <div style="margin-top: 30px;">
-              <a href="${config.WEB_ORIGIN}?userId=${user.id}" style="display: inline-block; padding: 12px 24px; background: #3b82f6; color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">
+              <a href="${dashboardUrl}" style="display: inline-block; padding: 12px 24px; background: #3b82f6; color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">
                 Go to Live Dashboard →
               </a>
             </div>
@@ -114,14 +124,30 @@ export function createAuthRouter(dependencies: AuthDependencies): Router {
       `);
     } catch (error) {
       logger.error({ error }, 'OAuth callback failed');
-      res.status(500).send(`
+      const errorMsg = error instanceof Error ? error.message : '';
+      const isDomainRestricted = errorMsg.startsWith('DOMAIN_RESTRICTED:');
+      const userReason = isDomainRestricted
+        ? errorMsg.replace('DOMAIN_RESTRICTED:', '')
+        : 'Something went wrong while connecting your account. Please try again.';
+
+      res.status(isDomainRestricted ? 403 : 500).send(`
         <!DOCTYPE html>
         <html>
-          <head><title>Error</title></head>
-          <body style="font-family: sans-serif; text-align: center; padding: 50px; background: #090d16; color: #f1f5f9;">
-            <h1 style="color: #f87171;">❌ Authentication Error</h1>
-            <p>Something went wrong. Please try again.</p>
-            <a href="${config.WEB_ORIGIN}" style="color: #60a5fa;">Back to Dashboard</a>
+          <head>
+            <title>Authentication Restricted</title>
+            <meta name="viewport" content="width=device-width, initial-scale=1.0">
+          </head>
+          <body style="font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; text-align: center; padding: 60px 20px; background: #060910; color: #f1f5f9;">
+            <div style="max-width: 480px; margin: 0 auto; background: rgba(14, 20, 36, 0.85); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 40px 30px; box-shadow: 0 20px 40px rgba(0,0,0,0.5);">
+              <div style="font-size: 48px; margin-bottom: 20px;">🔒</div>
+              <h1 style="color: #fb7185; font-size: 24px; margin-bottom: 12px;">${isDomainRestricted ? 'Domain Access Restricted' : 'Authentication Error'}</h1>
+              <p style="color: #94a3b8; font-size: 15px; line-height: 1.6; margin-bottom: 30px;">
+                ${userReason}
+              </p>
+              <a href="${config.WEB_ORIGIN}" style="display: inline-block; padding: 12px 28px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 14px; box-shadow: 0 4px 14px rgba(59,130,246,0.3);">
+                Return to Login →
+              </a>
+            </div>
           </body>
         </html>
       `);
@@ -130,39 +156,42 @@ export function createAuthRouter(dependencies: AuthDependencies): Router {
 
   /**
    * GET /auth/me
-   * Returns current connected user info (for web dashboard)
+   * Returns the authenticated user info (requires valid JWT via middleware).
    */
-  router.get('/me', async (req: Request, res: Response) => {
-    try {
-      const { userId } = req.query;
-
-      let user = null;
-      if (userId && typeof userId === 'string') {
-        user = await prisma.user.findUnique({ where: { id: userId } });
+  router.get(
+    '/me',
+    (req: Request, res: Response, next: NextFunction) => {
+      if (requireAuth) {
+        return requireAuth(req, res, next);
       }
+      return next();
+    },
+    async (req: Request, res: Response) => {
+      try {
+        const userId = req.userId;
 
-      // Fallback to most recently updated user if no userId parameter is provided
-      if (!user) {
-        user = await prisma.user.findFirst({
-          orderBy: { updatedAt: 'desc' },
+        if (!userId) {
+          return res.status(401).json({ error: 'Not authenticated' });
+        }
+
+        const user = await prisma.user.findUnique({ where: { id: userId } });
+
+        if (!user) {
+          return res.status(404).json({ error: 'No user found' });
+        }
+
+        return res.status(200).json({
+          id: user.id,
+          email: user.email,
+          name: user.name,
+          hasGmailToken: true,
         });
+      } catch (error) {
+        logger.error({ error }, 'Failed to get current user');
+        return res.status(500).json({ error: 'Internal server error' });
       }
-
-      if (!user) {
-        return res.status(404).json({ error: 'No user session found' });
-      }
-
-      return res.status(200).json({
-        id: user.id,
-        email: user.email,
-        name: user.name,
-        hasGmailToken: true,
-      });
-    } catch (error) {
-      logger.error({ error }, 'Failed to get current user');
-      return res.status(500).json({ error: 'Internal server error' });
-    }
-  });
+    },
+  );
 
   return router;
 }

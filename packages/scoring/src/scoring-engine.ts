@@ -201,19 +201,8 @@ export async function scoreEmail(
   preloadedSenderRules?: SenderRuleEntry[],
   preloadedKeywordRules?: KeywordRuleEntry[],
 ): Promise<ScoringResult> {
-  // Step 1: Check sender domain gate
-  const senderDomain = checkSenderDomain(fromHeader, allowedDomain);
-
-  if (!senderDomain) {
-    logger.debug({ fromHeader, allowedDomain }, 'Email filtered by domain gate');
-    return {
-      senderDomain: extractSenderDomain(fromHeader) || null,
-      isAllowedDomain: false,
-      priorityScore: 0,
-      priorityLabel: PRIORITY_LABELS.LOW,
-      priorityReasons: ['Sender domain not in allowed list'],
-    };
-  }
+  // Step 1: Extract sender domain
+  const senderDomain = extractSenderDomain(fromHeader) || null;
 
   // Step 2: Load rules (use pre-loaded if provided, otherwise query DB)
   const [senderRules, keywordRules] = preloadedSenderRules && preloadedKeywordRules
@@ -223,17 +212,29 @@ export async function scoreEmail(
         loadKeywordRules(prisma, userId),
       ]);
 
-  // Step 3: Score against sender rules
+  // Step 3: Check base domain score for primary university domain
+  let baseScore = 0;
+  const baseReasons: string[] = [];
+  if (
+    senderDomain &&
+    allowedDomain &&
+    senderDomain.toLowerCase() === allowedDomain.toLowerCase()
+  ) {
+    baseScore += 10;
+    baseReasons.push(`University domain (${allowedDomain})`);
+  }
+
+  // Step 4: Score against sender rules (e.g. nptel.iitm.ac.in, custom senders)
   const senderResult = scoreAgainstSenderRules(senderDomain, fromHeader, senderRules);
 
-  // Step 4: Score against keyword rules
+  // Step 5: Score against keyword rules
   const keywordResult = scoreAgainstKeywordRules(subject, snippet, keywordRules);
 
-  // Step 5: Calculate total score
-  const totalScore = senderResult.score + keywordResult.score;
-  const allReasons = [...senderResult.reasons, ...keywordResult.reasons];
+  // Step 6: Calculate total score
+  const totalScore = baseScore + senderResult.score + keywordResult.score;
+  const allReasons = [...baseReasons, ...senderResult.reasons, ...keywordResult.reasons];
 
-  // Step 6: Classify
+  // Step 7: Classify priority
   const label = classifyPriority(totalScore);
 
   logger.debug(
@@ -251,6 +252,7 @@ export async function scoreEmail(
     isAllowedDomain: true,
     priorityScore: totalScore,
     priorityLabel: label,
-    priorityReasons: allReasons.length > 0 ? allReasons : ['Allowed sender domain, no specific rules matched'],
+    priorityReasons:
+      allReasons.length > 0 ? allReasons : ['Standard email, no specific priority rules matched'],
   };
 }

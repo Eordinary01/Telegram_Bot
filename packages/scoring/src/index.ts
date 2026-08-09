@@ -15,3 +15,10 @@ export {
   type SenderRuleEntry,
   type KeywordRuleEntry,
 } from './scoring-engine.js';
+
+export {
+  extractDeadline,
+  generateGoogleCalendarUrl,
+  type ExtractedDeadline,
+} from './deadline.js';
+

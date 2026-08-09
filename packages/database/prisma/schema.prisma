@@ -85,6 +85,10 @@ model Email {
   priorityScore   Int      @default(0) @map("priority_score")
   priorityLabel   String?  @map("priority_label")
   priorityReasons String[] @map("priority_reasons")
+  notifiedAt      DateTime? @map("notified_at")
+  acknowledgedAt  DateTime? @map("acknowledged_at")
+  reminderCount   Int       @default(0) @map("reminder_count")
+  snoozedUntil    DateTime? @map("snoozed_until")
   createdAt       DateTime @default(now())
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)

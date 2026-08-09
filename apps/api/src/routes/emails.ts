@@ -23,10 +23,11 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
    */
   router.get('/', async (req: Request, res: Response) => {
     try {
-      const { userId, priority, search, limit = '20', offset = '0' } = req.query;
+      const userId = req.userId;
+      const { priority, search, limit = '20', offset = '0' } = req.query;
 
-      if (!userId || typeof userId !== 'string') {
-        return res.status(400).json({ error: 'Missing or invalid userId parameter' });
+      if (!userId) {
+        return res.status(401).json({ error: 'Not authenticated' });
       }
 
       // Build filter object
@@ -76,18 +77,26 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
    */
   router.get('/stats', async (req: Request, res: Response) => {
     try {
-      const { userId } = req.query;
+      const userId = req.userId;
 
-      if (!userId || typeof userId !== 'string') {
-        return res.status(400).json({ error: 'Missing or invalid userId parameter' });
+      if (!userId) {
+        return res.status(401).json({ error: 'Not authenticated' });
       }
 
-      const [total, high, medium, low, unread, syncState] = await Promise.all([
+      const [total, high, medium, low, unread, actionRequired, syncState] = await Promise.all([
         prisma.email.count({ where: { userId } }),
         prisma.email.count({ where: { userId, priorityLabel: 'HIGH' } }),
         prisma.email.count({ where: { userId, priorityLabel: 'MEDIUM' } }),
         prisma.email.count({ where: { userId, priorityLabel: 'LOW' } }),
         prisma.email.count({ where: { userId, isUnread: true } }),
+        prisma.email.count({
+          where: {
+            userId,
+            notifiedAt: { not: null },
+            acknowledgedAt: null,
+            priorityLabel: { in: ['HIGH', 'high', 'MEDIUM', 'medium'] },
+          },
+        }),
         prisma.syncState.findUnique({ where: { userId } }),
       ]);
 
@@ -97,6 +106,7 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
         medium,
         low,
         unread,
+        actionRequired,
         lastSyncAt: syncState?.lastSyncAt?.toISOString() ?? null,
       });
     } catch (error) {
@@ -110,10 +120,11 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
    * Server-Sent Events (SSE) stream for real-time dashboard updates.
    */
   router.get('/stream', (req: Request, res: Response) => {
-    const { userId } = req.query;
+    const userId = req.userId;
 
-    if (!userId || typeof userId !== 'string') {
-      return res.status(400).json({ error: 'Missing or invalid userId parameter' });
+    if (!userId) {
+      res.status(401).json({ error: 'Not authenticated' });
+      return;
     }
 
     res.setHeader('Content-Type', 'text/event-stream');
@@ -144,10 +155,11 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
    */
   router.post('/inject-test', async (req: Request, res: Response) => {
     try {
-      const { userId, type = 'placement' } = req.body as { userId?: string; type?: string };
+      const userId = req.userId;
+      const { type = 'placement' } = req.body as { type?: string };
 
-      if (!userId || typeof userId !== 'string') {
-        return res.status(400).json({ error: 'Missing or invalid userId' });
+      if (!userId) {
+        return res.status(401).json({ error: 'Not authenticated' });
       }
 
       const randomId = Math.random().toString(36).substring(7);
@@ -160,14 +172,19 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
         historyId: `hist-${Date.now()}`,
         from: 'placement.cell@jecrcu.edu.in',
         subject: '🚨 URGENT: Campus Placement Drive by Deloitte (2026 Batch)',
-        snippet: 'Mandatory registration link for Deloitte Placement Drive. Shortlisted candidates must submit resume by 5 PM today.',
+        snippet:
+          'Mandatory registration link for Deloitte Placement Drive. Shortlisted candidates must submit resume by 5 PM today.',
         receivedAt: now,
         isUnread: true,
         labels: ['INBOX'],
         senderDomain: 'jecrcu.edu.in',
         priorityScore: 120,
         priorityLabel: 'HIGH',
-        priorityReasons: ['Placement Notice (+50)', 'Urgent Keyword (+40)', 'Allowed Domain Suffix (+30)'],
+        priorityReasons: [
+          'Placement Notice (+50)',
+          'Urgent Keyword (+40)',
+          'Allowed Domain Suffix (+30)',
+        ],
       };
 
       if (type === 'exam') {
@@ -175,7 +192,8 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
           ...emailData,
           from: 'examcell@jecrcu.edu.in',
           subject: '📝 IMPORTANT: End-Term Examination Schedule Released',
-          snippet: 'The final examination schedule for B.Tech Semester VI is attached. Practical exams begin next Monday.',
+          snippet:
+            'The final examination schedule for B.Tech Semester VI is attached. Practical exams begin next Monday.',
           priorityScore: 90,
           priorityLabel: 'HIGH',
           priorityReasons: ['Exam Schedule (+50)', 'Allowed Domain Suffix (+40)'],
@@ -185,7 +203,8 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
           ...emailData,
           from: 'library@jecrcu.edu.in',
           subject: '📚 Weekly Library Newsletter #18',
-          snippet: 'Check out the new arrival of computer science and AI reference books in the central library.',
+          snippet:
+            'Check out the new arrival of computer science and AI reference books in the central library.',
           priorityScore: 15,
           priorityLabel: 'LOW',
           priorityReasons: ['Allowed Domain Suffix (+15)'],
@@ -222,7 +241,10 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
         }
       }
 
-      logger.info({ userId, emailId: savedEmail.id, telegramPushed }, 'Test dummy email injected successfully');
+      logger.info(
+        { userId, emailId: savedEmail.id, telegramPushed },
+        'Test dummy email injected successfully',
+      );
 
       return res.status(201).json({
         message: 'Test email injected successfully',
@@ -241,10 +263,11 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
    */
   router.delete('/clear-test', async (req: Request, res: Response) => {
     try {
-      const { userId, all } = req.query;
+      const userId = req.userId;
+      const { all } = req.query;
 
-      if (!userId || typeof userId !== 'string') {
-        return res.status(400).json({ error: 'Missing or invalid userId parameter' });
+      if (!userId) {
+        return res.status(401).json({ error: 'Not authenticated' });
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -270,6 +293,105 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
     } catch (error) {
       logger.error({ error }, 'Failed to clear emails');
       return res.status(500).json({ error: 'Failed to clear emails' });
+    }
+  });
+
+  /**
+   * PATCH /emails/:id/read
+   * Marks an email as read in DB.
+   */
+  router.patch('/:id/read', async (req: Request, res: Response) => {
+    try {
+      const id = req.params.id as string;
+      const userId = req.userId;
+
+      if (!id) {
+        return res.status(400).json({ error: 'Missing email id parameter' });
+      }
+
+      if (!userId) {
+        return res.status(401).json({ error: 'Not authenticated' });
+      }
+
+      const email = await prisma.email.updateMany({
+        where: { id, userId },
+        data: { isUnread: false },
+      });
+
+      if (email.count === 0) {
+        return res.status(404).json({ error: 'Email not found' });
+      }
+
+      const updated = await prisma.email.findUnique({ where: { id } });
+
+      return res.status(200).json({ message: 'Email marked as read', email: updated });
+    } catch (error) {
+      logger.error({ error }, 'Failed to mark email as read');
+      return res.status(500).json({ error: 'Failed to mark email as read' });
+    }
+  });
+
+  /**
+   * PATCH /emails/:id/acknowledge
+   * Acknowledges an email — stops all escalating reminders for this email.
+   */
+  router.patch('/:id/acknowledge', async (req: Request, res: Response) => {
+    try {
+      const id = req.params.id as string;
+      const userId = req.userId;
+
+      if (!id) {
+        return res.status(400).json({ error: 'Missing email id parameter' });
+      }
+
+      if (!userId) {
+        return res.status(401).json({ error: 'Not authenticated' });
+      }
+
+      const email = await prisma.email.updateMany({
+        where: { id, userId },
+        data: { acknowledgedAt: new Date(), isUnread: false },
+      });
+
+      if (email.count === 0) {
+        return res.status(404).json({ error: 'Email not found' });
+      }
+
+      const updated = await prisma.email.findUnique({ where: { id } });
+
+      return res.status(200).json({ message: 'Email acknowledged', email: updated });
+    } catch (error) {
+      logger.error({ error }, 'Failed to acknowledge email');
+      return res.status(500).json({ error: 'Failed to acknowledge email' });
+    }
+  });
+
+  /**
+   * GET /emails/action-required
+   * Returns emails that have been notified but not yet acknowledged (HIGH + MEDIUM priority).
+   */
+  router.get('/action-required', async (req: Request, res: Response) => {
+    try {
+      const userId = req.userId;
+
+      if (!userId) {
+        return res.status(401).json({ error: 'Not authenticated' });
+      }
+
+      const emails = await prisma.email.findMany({
+        where: {
+          userId,
+          notifiedAt: { not: null },
+          acknowledgedAt: null,
+          priorityLabel: { in: ['HIGH', 'high', 'MEDIUM', 'medium'] },
+        },
+        orderBy: { receivedAt: 'desc' },
+      });
+
+      return res.status(200).json({ emails, total: emails.length });
+    } catch (error) {
+      logger.error({ error }, 'Failed to fetch action-required emails');
+      return res.status(500).json({ error: 'Failed to fetch action-required emails' });
     }
   });
 

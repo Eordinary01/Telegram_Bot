@@ -7,6 +7,7 @@ const mockPrisma = {
     findFirst: vi.fn(),
     upsert: vi.fn(),
     update: vi.fn(),
+    delete: vi.fn(),
     deleteMany: vi.fn(),
   },
   user: {
@@ -164,9 +165,8 @@ describe('validateAndLink', () => {
     expect(result).toBeNull();
   });
 
-  it('should reject if chat_id already linked to another user', async () => {
+  it('should auto-unlink old user and link new user if chat_id already linked', async () => {
     const futureDate = new Date(Date.now() + 60_000);
-
     mockPrisma.telegramLink.findFirst.mockResolvedValue({
       id: 'link-1',
       userId: 'user-1',
@@ -180,14 +180,19 @@ describe('validateAndLink', () => {
     });
 
     mockPrisma.telegramLink.findUnique.mockResolvedValue({
+      id: 'link-old',
       userId: 'user-2', // Different user
       chatId: '987654',
     });
+    mockPrisma.telegramLink.delete.mockResolvedValue({});
+    mockPrisma.telegramLink.update.mockResolvedValue({});
 
     const result = await validateAndLink(mockPrisma as any, 'ABC12345', 987654);
 
-    expect(result).toBeNull();
-    expect(mockPrisma.telegramLink.update).not.toHaveBeenCalled();
+    expect(result).not.toBeNull();
+    expect(result?.userId).toBe('user-1');
+    expect(mockPrisma.telegramLink.delete).toHaveBeenCalledWith({ where: { id: 'link-old' } });
+    expect(mockPrisma.telegramLink.update).toHaveBeenCalled();
   });
 });
 

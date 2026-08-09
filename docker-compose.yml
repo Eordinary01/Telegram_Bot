@@ -28,6 +28,68 @@ services:
       timeout: 5s
       retries: 10
 
+  api:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    command: pnpm --filter @jecrc/api exec tsx src/index.ts
+    environment:
+      SERVICE: api
+      NODE_ENV: production
+      API_HOST: 0.0.0.0
+      API_PORT: 3000
+      WEB_ORIGIN: ${WEB_ORIGIN:-http://localhost:5173}
+      DATABASE_URL: ${DATABASE_URL:-postgresql://jecrc:jecrc_dev_password@postgres:5432/jecrc_mail?schema=public}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      ALLOWED_SENDER_DOMAIN: ${ALLOWED_SENDER_DOMAIN:-jecrcu.edu.in}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      GMAIL_PUSH_ENDPOINT: ${GMAIL_PUSH_ENDPOINT:-}
+      PUBSUB_TOPIC: ${PUBSUB_TOPIC:-}
+    ports:
+      - '3000:3000'
+    depends_on:
+      - postgres
+      - redis
+
+  worker:
+    build:
+      context: .
+      dockerfile: apps/api/Dockerfile
+    command: pnpm --filter @jecrc/worker exec tsx src/index.ts
+    environment:
+      SERVICE: worker
+      NODE_ENV: production
+      DATABASE_URL: ${DATABASE_URL:-postgresql://jecrc:jecrc_dev_password@postgres:5432/jecrc_mail?schema=public}
+      REDIS_URL: ${REDIS_URL:-redis://redis:6379}
+      ALLOWED_SENDER_DOMAIN: ${ALLOWED_SENDER_DOMAIN:-jecrcu.edu.in}
+      GOOGLE_CLIENT_ID: ${GOOGLE_CLIENT_ID}
+      GOOGLE_CLIENT_SECRET: ${GOOGLE_CLIENT_SECRET}
+      GOOGLE_REDIRECT_URI: ${GOOGLE_REDIRECT_URI}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY}
+      JWT_SECRET: ${JWT_SECRET}
+      JWT_EXPIRES_IN: ${JWT_EXPIRES_IN:-24h}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+    depends_on:
+      - postgres
+      - redis
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+      args:
+        VITE_API_URL: ${VITE_API_URL:-http://localhost:3000}
+    ports:
+      - '5173:80'
+    depends_on:
+      - api
+
 volumes:
   postgres_data:
   redis_data:

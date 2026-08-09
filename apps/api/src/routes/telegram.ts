@@ -24,10 +24,10 @@ export function createTelegramRouter(dependencies: TelegramDependencies): Router
    */
   router.post('/link', async (req: Request, res: Response) => {
     try {
-      const { userId } = req.body as { userId?: string };
+      const userId = req.userId;
 
       if (!userId || typeof userId !== 'string') {
-        return res.status(400).json({ error: 'Invalid or missing userId' });
+        return res.status(401).json({ error: 'Not authenticated' });
       }
 
       // Verify user exists
@@ -44,7 +44,8 @@ export function createTelegramRouter(dependencies: TelegramDependencies): Router
       if (!result) {
         return res.status(409).json({
           error: 'Telegram account already linked',
-          message: 'This user already has a linked Telegram account. Unlink first to generate a new code.',
+          message:
+            'This user already has a linked Telegram account. Unlink first to generate a new code.',
         });
       }
 
@@ -53,8 +54,7 @@ export function createTelegramRouter(dependencies: TelegramDependencies): Router
       res.status(200).json({
         code: result.code,
         expiresAt: result.expiresAt.toISOString(),
-        instructions:
-          'Open Telegram, find the JECRC Mail Bot, and send: /start ' + result.code,
+        instructions: 'Open Telegram, find the JECRC Mail Bot, and send: /start ' + result.code,
       });
     } catch (error) {
       logger.error({ error }, 'Failed to generate linking code');
@@ -63,15 +63,15 @@ export function createTelegramRouter(dependencies: TelegramDependencies): Router
   });
 
   /**
-   * GET /telegram/link/:userId
-   * Gets the current linking status for a user.
+   * GET /telegram/link
+   * Gets the current linking status for the authenticated user.
    */
-  router.get('/link/:userId', async (req: Request, res: Response) => {
+  router.get('/link', async (req: Request, res: Response) => {
     try {
-      const { userId } = req.params;
+      const userId = req.userId;
 
       if (!userId || typeof userId !== 'string') {
-        return res.status(400).json({ error: 'Invalid userId' });
+        return res.status(401).json({ error: 'Not authenticated' });
       }
 
       const link = await getTelegramLink(prisma, userId);
@@ -109,15 +109,15 @@ export function createTelegramRouter(dependencies: TelegramDependencies): Router
   });
 
   /**
-   * DELETE /telegram/link/:userId
-   * Unlinks Telegram from a user account.
+   * DELETE /telegram/link
+   * Unlinks Telegram from the authenticated user account.
    */
-  router.delete('/link/:userId', async (req: Request, res: Response) => {
+  router.delete('/link', async (req: Request, res: Response) => {
     try {
-      const { userId } = req.params;
+      const userId = req.userId;
 
       if (!userId || typeof userId !== 'string') {
-        return res.status(400).json({ error: 'Invalid userId' });
+        return res.status(401).json({ error: 'Not authenticated' });
       }
 
       await removeTelegramLink(prisma, userId);

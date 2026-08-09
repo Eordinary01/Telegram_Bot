@@ -4,8 +4,12 @@ import ReactDOM from 'react-dom/client';
 import './styles.css';
 import { EmailCard, type EmailData } from './components/EmailCard';
 import { TelegramModal } from './components/TelegramModal';
+import { RulesPanel } from './components/RulesPanel';
+import { ThemePicker, initializeTheme } from './components/ThemePicker';
+import { api, getToken, setToken, clearToken, streamUrl, API_URL } from './lib/api';
 
-const API_URL = 'http://localhost:3000';
+// Initialize theme from localStorage on app boot
+initializeTheme();
 
 interface User {
   id: string;
@@ -20,6 +24,7 @@ interface Stats {
   medium: number;
   low: number;
   unread: number;
+  actionRequired: number;
   lastSyncAt: string | null;
 }
 
@@ -27,59 +32,81 @@ function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [emails, setEmails] = useState<EmailData[]>([]);
-  const [stats, setStats] = useState<Stats>({ total: 0, high: 0, medium: 0, low: 0, unread: 0, lastSyncAt: null });
-  const [activeTab, setActiveTab] = useState<'ALL' | 'HIGH' | 'MEDIUM' | 'LOW'>('ALL');
+  const [stats, setStats] = useState<Stats>({
+    total: 0,
+    high: 0,
+    medium: 0,
+    low: 0,
+    unread: 0,
+    actionRequired: 0,
+    lastSyncAt: null,
+  });
+  const [activeTab, setActiveTab] = useState<'ALL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'ACTION_REQUIRED'>(
+    'ALL',
+  );
   const [searchTerm, setSearchTerm] = useState('');
   const [syncing, setSyncing] = useState(false);
   const [showTelegramModal, setShowTelegramModal] = useState(false);
+  const [showRulesPanel, setShowRulesPanel] = useState(false);
   const [telegramLinked, setTelegramLinked] = useState(false);
+  const [userRulesCount, setUserRulesCount] = useState(0);
+  const [showThemePicker, setShowThemePicker] = useState(false);
+  const [showDevTools, setShowDevTools] = useState(false);
 
-  // Check auth user status
+  // On first load, capture the auth token from the OAuth redirect query
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
-    const userIdFromUrl = urlParams.get('userId');
-    const storedUserId = userIdFromUrl || localStorage.getItem('jecrc_user_id');
+    const tokenFromUrl = urlParams.get('token');
 
-    const endpoint = storedUserId
-      ? `${API_URL}/auth/me?userId=${storedUserId}`
-      : `${API_URL}/auth/me`;
+    if (tokenFromUrl) {
+      setToken(tokenFromUrl);
+      // Clean the token out of the URL
+      window.history.replaceState({}, '', window.location.pathname);
+    }
 
-    fetch(endpoint)
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => {
-        if (data) {
-          setUser(data);
-          localStorage.setItem('jecrc_user_id', data.id);
-        }
-      })
-      .catch(() => setUser(null))
+    const token = getToken();
+
+    if (!token) {
+      setAuthLoading(false);
+      return;
+    }
+
+    api<User>('/auth/me')
+      .then((data) => setUser(data))
+      .catch(() => clearToken())
       .finally(() => setAuthLoading(false));
   }, []);
 
-  // Fetch emails and stats when user is loaded or tab/search changes
+  // Fetch emails, stats, rules, and link status
   const fetchData = useCallback(() => {
     if (!user) return;
 
-    const params = new URLSearchParams({
-      userId: user.id,
-      priority: activeTab,
-      search: searchTerm,
-    });
+    // For ACTION_REQUIRED tab, use the dedicated endpoint
+    const fetchFn =
+      activeTab === 'ACTION_REQUIRED'
+        ? api<{ emails: EmailData[] }>('/emails/action-required')
+        : api<{ emails: EmailData[] }>(
+            `/emails?priority=${activeTab}&search=${encodeURIComponent(searchTerm)}`,
+          );
 
-    fetch(`${API_URL}/emails?${params}`)
-      .then((res) => res.json())
+    fetchFn
       .then((data) => setEmails(data.emails || []))
       .catch((err) => console.error('Failed to fetch emails:', err));
 
-    fetch(`${API_URL}/emails/stats?userId=${user.id}`)
-      .then((res) => res.json())
+    api<Stats>('/emails/stats')
       .then((data) => setStats(data))
       .catch((err) => console.error('Failed to fetch stats:', err));
 
-    fetch(`${API_URL}/telegram/link/${user.id}`)
-      .then((res) => res.json())
+    api<{ linked: boolean }>('/telegram/link')
       .then((data) => setTelegramLinked(!!data.linked))
       .catch(() => setTelegramLinked(false));
+
+    api<{ userKeywords: unknown[]; userSenders: unknown[] }>('/rules')
+      .then((data) => {
+        const count = (data.userKeywords?.length || 0) + (data.userSenders?.length || 0);
+        setUserRulesCount(count);
+      })
+      .catch(() => {});
   }, [user, activeTab, searchTerm]);
 
   useEffect(() => {
@@ -90,7 +117,7 @@ function App() {
   useEffect(() => {
     if (!user) return;
 
-    const eventSource = new EventSource(`${API_URL}/emails/stream?userId=${user.id}`);
+    const eventSource = new EventSource(streamUrl('/emails/stream'));
 
     eventSource.onmessage = (e) => {
       try {
@@ -111,11 +138,7 @@ function App() {
   const handleInjectTest = async (type: string = 'placement') => {
     if (!user) return;
     try {
-      await fetch(`${API_URL}/emails/inject-test`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: user.id, type }),
-      });
+      await api('/emails/inject-test', { method: 'POST', body: { type } });
       fetchData();
     } catch (err) {
       console.error('Failed to inject test email:', err);
@@ -125,9 +148,7 @@ function App() {
   const handleClearTestEmails = async () => {
     if (!user) return;
     try {
-      await fetch(`${API_URL}/emails/clear-test?userId=${user.id}`, {
-        method: 'DELETE',
-      });
+      await api('/emails/clear-test?all=true', { method: 'DELETE' });
       fetchData();
     } catch (err) {
       console.error('Failed to clear test emails:', err);
@@ -138,7 +159,7 @@ function App() {
     if (!user) return;
     setSyncing(true);
     try {
-      await fetch(`${API_URL}/sync/${user.id}`, { method: 'POST' });
+      await api('/sync', { method: 'POST' });
       fetchData();
     } catch (err) {
       console.error('Sync failed:', err);
@@ -147,48 +168,69 @@ function App() {
     }
   };
 
+  const handleLogout = () => {
+    clearToken();
+    setUser(null);
+  };
+
+  // Onboarding Step Calculations
+  const isStep1Done = telegramLinked;
+  const isStep2Done = userRulesCount >= 3;
+  const completedStepsCount = (isStep1Done ? 1 : 0) + (isStep2Done ? 1 : 0);
+
+  // Loading screen
   if (authLoading) {
     return (
-      <div className="app-shell" style={{ display: 'grid', placeItems: 'center', minHeight: '80vh' }}>
-        <p style={{ color: '#94a3b8' }}>Loading priority sync system...</p>
+      <div className="app-shell loading-screen">
+        <div style={{ textAlign: 'center' }}>
+          <div className="spinner" />
+          <p className="loading-text">Initializing priority sync...</p>
+        </div>
       </div>
     );
   }
 
-  // Unauthenticated view
+  // Login page
   if (!user) {
     return (
-      <main className="app-shell" style={{ display: 'grid', placeItems: 'center', minHeight: '90vh' }}>
-        <section className="glass-card" style={{ maxWidth: '580px', textAlign: 'center', padding: '3rem 2rem' }}>
-          <div className="brand-icon" style={{ margin: '0 auto 1.5rem', width: '56px', height: '56px', fontSize: '2rem' }}>
-            📧
-          </div>
-          <h1 className="brand-title" style={{ fontSize: '2.25rem', marginBottom: '0.75rem' }}>
-            JECRC Mail Priority Sync
-          </h1>
-          <p style={{ color: '#94a3b8', fontSize: '1rem', marginBottom: '2rem' }}>
-            Smart email filtering & real-time Telegram alerts for Placement, Exam, and Academic notices.
+      <main className="login-page">
+        <section className="glass-card login-card">
+          <div className="login-brand-icon">📧</div>
+          <h1 className="login-title">JECRC Mail Priority Sync</h1>
+          <p className="login-subtitle">
+            Smart email priority scoring & real-time Telegram alerts for Placement, Exams, and NPTEL notices.
           </p>
 
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem', textAlign: 'left', marginBottom: '2.5rem' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span style={{ fontSize: '1.25rem' }}>🎯</span>
-              <span style={{ fontSize: '0.925rem', color: '#cbd5e1' }}>Exact `@jecrcu.edu.in` sender domain gate</span>
+          <div className="features-grid">
+            <div className="feature-item">
+              <span className="feature-icon">🔒</span>
+              <span className="feature-text">
+                Only <code>@jecrcu.edu.in</code> Google accounts permitted
+              </span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span style={{ fontSize: '1.25rem' }}>✈️</span>
-              <span style={{ fontSize: '0.925rem', color: '#cbd5e1' }}>Instant Telegram alerts for high-priority mail</span>
+            <div className="feature-item">
+              <span className="feature-icon">✈️</span>
+              <span className="feature-text">
+                Instant Telegram alerts for high-priority mail
+              </span>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <span style={{ fontSize: '1.25rem' }}>🔒</span>
-              <span style={{ fontSize: '0.925rem', color: '#cbd5e1' }}>Read-only scope & encrypted tokens at rest</span>
+            <div className="feature-item">
+              <span className="feature-icon">🌐</span>
+              <span className="feature-text">
+                Scores all sources (NPTEL, Deloitte, Faculty & more)
+              </span>
+            </div>
+            <div className="feature-item">
+              <span className="feature-icon">➕</span>
+              <span className="feature-text">
+                Custom priority keywords & sender rules
+              </span>
             </div>
           </div>
 
           <a
             href={`${API_URL}/auth/google`}
-            className="btn btn-primary"
-            style={{ width: '100%', justifyContent: 'center', padding: '0.9rem', fontSize: '1.05rem' }}
+            className="btn btn-primary google-btn"
           >
             <svg viewBox="0 0 24 24" width="20" height="20">
               <path
@@ -208,7 +250,7 @@ function App() {
                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
               />
             </svg>
-            Connect with Gmail
+            Connect @jecrcu.edu.in Account
           </a>
         </section>
       </main>
@@ -216,39 +258,131 @@ function App() {
   }
 
   // Dashboard view
+  const tabLabels: Record<typeof activeTab, string> = {
+    ALL: 'All',
+    HIGH: 'High',
+    MEDIUM: 'Medium',
+    LOW: 'Low',
+    ACTION_REQUIRED: `⚠️ Action (${stats.actionRequired})`,
+  };
+
   return (
     <div className="app-shell">
-      {/* Navbar Header */}
+      {/* Sticky Header */}
       <header className="app-header">
         <div className="brand">
           <div className="brand-icon">📬</div>
           <div>
             <h1 className="brand-title">JECRC Mail Sync</h1>
-            <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Priority Notification Dashboard</span>
+            <span className="brand-subtitle">Priority Notification Dashboard</span>
           </div>
         </div>
 
-        <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
+        <div className="header-actions">
           <div className="user-badge">
-            <span className="status-dot"></span>
+            <span className="status-dot" />
             <span>{user.email}</span>
           </div>
-          <a
-            href={`${API_URL}/auth/google`}
-            className="btn btn-secondary"
-            style={{ fontSize: '0.8rem', padding: '0.5rem 0.85rem' }}
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => setShowRulesPanel(true)}
           >
-            Reconnect
-          </a>
+            🎯 Rules ({userRulesCount})
+          </button>
+          <div style={{ position: 'relative' }}>
+            <button
+              className={`icon-btn ${showThemePicker ? 'active' : ''}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowThemePicker(!showThemePicker);
+              }}
+              title="Theme settings"
+            >
+              ⚙️
+            </button>
+            <ThemePicker
+              isOpen={showThemePicker}
+              onClose={() => setShowThemePicker(false)}
+            />
+          </div>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={handleLogout}
+          >
+            Logout
+          </button>
         </div>
       </header>
 
-      {/* Stats Cards */}
+      {/* 2-Step Setup Onboarding Banner */}
+      <div className="onboarding-banner">
+        <div className="onboarding-header">
+          <div className="onboarding-title">
+            <span>🚀 Account Setup Checklist</span>
+            <span className="onboarding-badge">
+              {completedStepsCount === 2 ? '🎉 Setup Completed (2/2)' : `${completedStepsCount}/2 Steps Completed`}
+            </span>
+          </div>
+          <span style={{ fontSize: '0.78rem', color: 'var(--text-tertiary)' }}>
+            Complete these 2 steps after connecting Gmail to start receiving smart Telegram alerts.
+          </span>
+        </div>
+
+        <div className="onboarding-steps-grid">
+          {/* Step 1: Connect Telegram */}
+          <div className={`onboarding-step-card ${isStep1Done ? 'completed' : ''}`}>
+            <div className="step-info">
+              <div className={`step-check-icon ${isStep1Done ? 'done' : 'pending'}`}>
+                {isStep1Done ? '✓' : '1'}
+              </div>
+              <div>
+                <div className="step-title">Step 1: Connect Telegram</div>
+                <div className="step-desc">
+                  {isStep1Done ? 'Telegram bot linked successfully' : 'Link Telegram bot for instant alerts & reminders'}
+                </div>
+              </div>
+            </div>
+            <button
+              className={`btn ${isStep1Done ? 'btn-secondary' : 'btn-primary'} btn-sm`}
+              onClick={() => setShowTelegramModal(true)}
+            >
+              {isStep1Done ? '⚙️ Settings' : '✈️ Link Telegram'}
+            </button>
+          </div>
+
+          {/* Step 2: Create 3 Custom Rules */}
+          <div className={`onboarding-step-card ${isStep2Done ? 'completed' : ''}`}>
+            <div className="step-info">
+              <div className={`step-check-icon ${isStep2Done ? 'done' : 'pending'}`}>
+                {isStep2Done ? '✓' : '2'}
+              </div>
+              <div>
+                <div className="step-title">Step 2: Create 3 Priority Rules</div>
+                <div className="step-desc">
+                  {isStep2Done
+                    ? `${userRulesCount} custom rules active`
+                    : `Create 3 rules (e.g. NPTEL, Placement) — ${userRulesCount}/3 created`}
+                </div>
+              </div>
+            </div>
+            <button
+              className={`btn ${isStep2Done ? 'btn-secondary' : 'btn-primary'} btn-sm`}
+              onClick={() => setShowRulesPanel(true)}
+            >
+              {isStep2Done ? '🎯 Manage Rules' : '+ Add Rules'}
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* Stats Grid */}
       <section className="stats-grid">
         <div className="glass-card stat-card">
           <span className="stat-title">Total Filtered</span>
           <div className="stat-value-group">
-            <span className="stat-value" style={{ color: '#60a5fa' }}>{stats.total}</span>
+            <span className="stat-value" style={{ color: 'var(--primary)' }}>
+              {stats.total}
+            </span>
             <span className="stat-icon">📨</span>
           </div>
         </div>
@@ -256,7 +390,9 @@ function App() {
         <div className="glass-card stat-card">
           <span className="stat-title">High Priority</span>
           <div className="stat-value-group">
-            <span className="stat-value" style={{ color: '#fca5a5' }}>{stats.high}</span>
+            <span className="stat-value" style={{ color: '#fca5a5' }}>
+              {stats.high}
+            </span>
             <span className="stat-icon">🔥</span>
           </div>
         </div>
@@ -264,15 +400,35 @@ function App() {
         <div className="glass-card stat-card">
           <span className="stat-title">Medium Priority</span>
           <div className="stat-value-group">
-            <span className="stat-value" style={{ color: '#fcd34d' }}>{stats.medium}</span>
+            <span className="stat-value" style={{ color: '#fcd34d' }}>
+              {stats.medium}
+            </span>
             <span className="stat-icon">⚡</span>
+          </div>
+        </div>
+
+        <div
+          className={`glass-card stat-card ${stats.actionRequired > 0 ? 'action-required-stat-card' : ''}`}
+        >
+          <span className="stat-title">Action Required</span>
+          <div className="stat-value-group">
+            <span
+              className="stat-value"
+              style={{ color: stats.actionRequired > 0 ? '#f97316' : '#4ade80' }}
+            >
+              {stats.actionRequired}
+            </span>
+            <span className="stat-icon">⚠️</span>
           </div>
         </div>
 
         <div className="glass-card stat-card">
           <span className="stat-title">Telegram Status</span>
           <div className="stat-value-group">
-            <span className="stat-value" style={{ fontSize: '1.2rem', color: telegramLinked ? '#4ade80' : '#fb7185' }}>
+            <span
+              className="stat-value"
+              style={{ fontSize: '1.15rem', color: telegramLinked ? '#4ade80' : '#fb7185' }}
+            >
               {telegramLinked ? 'Linked' : 'Not Linked'}
             </span>
             <span className="stat-icon">✈️</span>
@@ -280,75 +436,118 @@ function App() {
         </div>
       </section>
 
-      {/* Toolbar Controls */}
+      {/* Toolbar */}
       <div className="toolbar">
         <div className="search-input-wrap">
           <span className="search-icon">🔍</span>
           <input
             type="text"
             className="search-input"
-            placeholder="Search placement, exams, faculty..."
+            placeholder="Search placement, exams, NPTEL, faculty..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
           />
         </div>
 
         <div className="filter-tabs">
-          {(['ALL', 'HIGH', 'MEDIUM', 'LOW'] as const).map((tab) => (
+          {(['ALL', 'HIGH', 'MEDIUM', 'LOW', 'ACTION_REQUIRED'] as const).map((tab) => (
             <button
               key={tab}
-              className={`tab-btn ${activeTab === tab ? 'active' : ''}`}
+              className={`tab-btn ${activeTab === tab ? 'active' : ''} ${tab === 'ACTION_REQUIRED' && stats.actionRequired > 0 ? 'action-required-tab' : ''}`}
               onClick={() => setActiveTab(tab)}
             >
-              {tab}
+              {tabLabels[tab]}
             </button>
           ))}
         </div>
 
         <div className="action-btns">
-          <button className="btn btn-secondary" onClick={() => setShowTelegramModal(true)}>
-            ✈️ {telegramLinked ? 'Telegram Settings' : 'Link Telegram'}
+          <button className="btn btn-secondary btn-sm" onClick={() => setShowTelegramModal(true)}>
+            ✈️ {telegramLinked ? 'Telegram' : 'Link Telegram'}
           </button>
-          <button className="btn btn-secondary" onClick={() => handleInjectTest('placement')} title="Inject sample placement drive email">
-            🧪 + Placement Email
-          </button>
-          <button className="btn btn-secondary" onClick={() => handleInjectTest('exam')} title="Inject sample exam schedule email">
-            🧪 + Exam Email
-          </button>
-          <button className="btn btn-secondary" onClick={handleClearTestEmails} title="Clear all dummy test emails">
-            🗑️ Clear Test Emails
-          </button>
-          <button className="btn btn-primary" onClick={handleSyncNow} disabled={syncing}>
+          <button className="btn btn-primary btn-sm" onClick={handleSyncNow} disabled={syncing}>
             {syncing ? 'Syncing...' : '🔄 Sync Now'}
           </button>
+          <button
+            className="dev-tools-toggle"
+            onClick={() => setShowDevTools(!showDevTools)}
+          >
+            🧪 Dev {showDevTools ? '▲' : '▼'}
+          </button>
         </div>
+      </div>
+
+      {/* Dev Tools (collapsible) */}
+      {showDevTools && (
+        <div className="dev-tools-panel" style={{ marginBottom: '1.25rem' }}>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => handleInjectTest('placement')}
+          >
+            + Placement Email
+          </button>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => handleInjectTest('exam')}
+          >
+            + Exam Email
+          </button>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={handleClearTestEmails}
+          >
+            🗑️ Clear Test Emails
+          </button>
+        </div>
+      )}
+
+      {/* Feed Header */}
+      <div className="feed-header">
+        <h2 className="feed-title">
+          Inbox
+          <span className="feed-count">{emails.length}</span>
+        </h2>
       </div>
 
       {/* Email Feed */}
       <section className="feed-container">
         {emails.length > 0 ? (
-          emails.map((email) => <EmailCard key={email.id} email={email} />)
+          emails.map((email, index) => (
+            <div
+              key={email.id}
+              className="email-card-enter"
+              style={{ animationDelay: `${Math.min(index * 40, 300)}ms` }}
+            >
+              <EmailCard email={email} onAcknowledge={() => fetchData()} />
+            </div>
+          ))
         ) : (
           <div className="glass-card empty-state">
             <div className="empty-icon">📭</div>
-            <h3 style={{ fontFamily: 'Outfit', fontSize: '1.25rem', marginBottom: '0.5rem' }}>
-              No emails found
-            </h3>
-            <p style={{ fontSize: '0.9rem', color: '#64748b' }}>
+            <h3 className="empty-title">No emails found</h3>
+            <p className="empty-description">
               {searchTerm
-                ? 'No emails match your search filter.'
+                ? 'No emails match your search filter. Try adjusting your keywords.'
                 : 'Click "Sync Now" to fetch recent messages from your connected @jecrcu.edu.in account.'}
             </p>
+            {!searchTerm && (
+              <button className="btn btn-primary" onClick={handleSyncNow} disabled={syncing}>
+                {syncing ? 'Syncing...' : '🔄 Sync Now'}
+              </button>
+            )}
           </div>
         )}
       </section>
 
       {/* Telegram Link Modal */}
-      {showTelegramModal && (
-        <TelegramModal
-          userId={user.id}
-          apiUrl={API_URL}
-          onClose={() => setShowTelegramModal(false)}
+      {showTelegramModal && <TelegramModal onClose={() => setShowTelegramModal(false)} />}
+
+      {/* Priority Rules Modal */}
+      {showRulesPanel && (
+        <RulesPanel
+          onClose={() => setShowRulesPanel(false)}
+          onRescanDone={() => fetchData()}
+          onRulesUpdated={(count) => setUserRulesCount(count)}
         />
       )}
     </div>

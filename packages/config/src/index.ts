@@ -30,6 +30,10 @@ const environmentSchema = z.object({
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),
   GOOGLE_REDIRECT_URI: z.string().url(),
+  JWT_SECRET: z.string().min(32, {
+    message: 'JWT_SECRET must be at least 32 characters',
+  }),
+  JWT_EXPIRES_IN: z.string().min(1).default('24h'),
   ENCRYPTION_KEY: z
     .string()
     .min(1)

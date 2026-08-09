@@ -15,3 +15,4 @@ export {
   deleteUser,
   type AuthenticatedUser,
 } from './user-service.js';
+export { signAuthToken, verifyAuthToken } from './jwt.js';

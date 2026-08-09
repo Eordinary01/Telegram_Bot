@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { api } from '../lib/api';
 
 export interface EmailData {
   id: string;
@@ -12,14 +13,31 @@ export interface EmailData {
   priorityLabel: 'HIGH' | 'MEDIUM' | 'LOW';
   priorityReasons?: string[];
   senderDomain?: string | null;
+  notifiedAt?: string | null;
+  acknowledgedAt?: string | null;
+  reminderCount?: number;
+  snoozedUntil?: string | null;
 }
 
 interface EmailCardProps {
   email: EmailData;
+  onAcknowledge?: (id: string) => void;
 }
 
-export const EmailCard: React.FC<EmailCardProps> = ({ email }) => {
+function getSenderInitial(from: string): string {
+  const name = from.split('<')[0]?.trim();
+  if (!name) return '?';
+  return name.charAt(0).toUpperCase();
+}
+
+function getSenderDisplayName(from: string): string {
+  const parts = from.split('<');
+  return parts[0]?.trim() || from;
+}
+
+export const EmailCard: React.FC<EmailCardProps> = ({ email, onAcknowledge }) => {
   const [expanded, setExpanded] = useState(false);
+  const [acknowledging, setAcknowledging] = useState(false);
 
   const formattedDate = new Date(email.receivedAt).toLocaleDateString(undefined, {
     month: 'short',
@@ -35,28 +53,84 @@ export const EmailCard: React.FC<EmailCardProps> = ({ email }) => {
         ? 'medium-priority'
         : 'low-priority';
 
+  // Determine action-required state
+  const isActionRequired =
+    email.notifiedAt &&
+    !email.acknowledgedAt &&
+    (email.priorityLabel === 'HIGH' || email.priorityLabel === 'MEDIUM');
+
+  const isAcknowledged = !!email.acknowledgedAt;
+  const reminderCount = email.reminderCount ?? 0;
+  const scorePercent = Math.min((email.priorityScore / 100) * 100, 100);
+
+  const handleAcknowledge = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    setAcknowledging(true);
+    try {
+      await api(`/emails/${email.id}/acknowledge`, { method: 'PATCH' });
+      if (onAcknowledge) {
+        onAcknowledge(email.id);
+      }
+    } catch (err) {
+      console.error('Failed to acknowledge:', err);
+    } finally {
+      setAcknowledging(false);
+    }
+  };
+
   return (
-    <div className={`glass-card email-card ${priorityClass}`} onClick={() => setExpanded(!expanded)}>
+    <div
+      className={`glass-card email-card ${priorityClass} ${isActionRequired ? 'action-required-card' : ''}`}
+      onClick={() => setExpanded(!expanded)}
+    >
       <div className="email-card-header">
-        <div>
-          <span className="sender-name">{email.from}</span>
-          {email.senderDomain && (
-            <span style={{ fontSize: '0.75rem', color: '#64748b', marginLeft: '0.5rem' }}>
-              ({email.senderDomain})
-            </span>
-          )}
+        <div className="sender-info">
+          <div className={`sender-avatar ${email.priorityLabel.toLowerCase()}`}>
+            {getSenderInitial(email.from)}
+          </div>
+          <div>
+            <div className="sender-name">{getSenderDisplayName(email.from)}</div>
+            {email.senderDomain && (
+              <div className="sender-domain">{email.senderDomain}</div>
+            )}
+          </div>
         </div>
-        <span className="email-date">{formattedDate}</span>
+        <div className="email-meta">
+          {isActionRequired && <span className="action-required-badge">⚠️ ACTION</span>}
+          {isAcknowledged && <span className="acknowledged-badge">✅ Done</span>}
+          <span className="email-date">{formattedDate}</span>
+        </div>
       </div>
 
       <h3 className="email-subject">{email.subject}</h3>
 
       {email.snippet && <p className="email-snippet">{email.snippet}</p>}
 
-      <div className="badge-row">
+      {/* Score Bar */}
+      <div className="score-bar-wrap">
+        <div className="score-bar-track">
+          <div
+            className={`score-bar-fill ${email.priorityLabel.toLowerCase()}`}
+            style={{ width: `${scorePercent}%` }}
+          />
+        </div>
+        <span className="score-label">{email.priorityScore} pts</span>
+      </div>
+
+      <div className="badge-row" style={{ marginTop: '0.65rem' }}>
         <span className={`priority-badge ${email.priorityLabel.toLowerCase()}`}>
-          {email.priorityLabel} • {email.priorityScore} PTS
+          {email.priorityLabel}
         </span>
+
+        {reminderCount > 0 && (
+          <span className="reminder-indicator">
+            🔔 {reminderCount} reminder{reminderCount > 1 ? 's' : ''}
+          </span>
+        )}
+
+        {email.snoozedUntil && new Date(email.snoozedUntil) > new Date() && (
+          <span className="snooze-indicator">⏰ Snoozed</span>
+        )}
 
         {email.priorityReasons?.map((reason, idx) => (
           <span key={idx} className="reason-tag">
@@ -64,6 +138,19 @@ export const EmailCard: React.FC<EmailCardProps> = ({ email }) => {
           </span>
         ))}
       </div>
+
+      {/* Action buttons for action-required emails */}
+      {isActionRequired && (
+        <div className="email-actions" onClick={(e) => e.stopPropagation()}>
+          <button
+            className="btn btn-acknowledge"
+            onClick={handleAcknowledge}
+            disabled={acknowledging}
+          >
+            {acknowledging ? 'Acknowledging...' : '✅ Acknowledge'}
+          </button>
+        </div>
+      )}
 
       {expanded && (
         <div className="score-drawer" onClick={(e) => e.stopPropagation()}>

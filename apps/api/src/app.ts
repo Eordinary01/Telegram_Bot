@@ -4,7 +4,7 @@ import helmet from 'helmet';
 import type { PrismaClient } from '@jecrc/database';
 import type { AppConfig } from '@jecrc/config';
 import type { Queue } from 'bullmq';
-import type { SyncUserEmailsJob } from '@jecrc/queue';
+import type { SyncUserEmailsJob, RescanEmailsJob } from '@jecrc/queue';
 
 import { createAuthRouter } from './routes/auth.js';
 import { createSyncRouter } from './routes/sync.js';
@@ -12,6 +12,8 @@ import { createWebhookRouter } from './routes/webhooks.js';
 import { createTelegramRouter } from './routes/telegram.js';
 import { createEmailsRouter } from './routes/emails.js';
 import { createMetricsRouter } from './routes/metrics.js';
+import { createRulesRouter } from './routes/rules.js';
+import { createRequireAuth } from './middleware/require-auth.js';
 
 export type DependencyCheck = () => Promise<void>;
 
@@ -22,8 +24,8 @@ interface AppDependencies {
   checkRedis: DependencyCheck;
   webOrigin: string;
   emailSyncQueue: Queue<SyncUserEmailsJob>;
+  emailRescanQueue: Queue<RescanEmailsJob>;
 }
-
 export function createApp(dependencies: AppDependencies): Express {
   const app = express();
 
@@ -31,6 +33,8 @@ export function createApp(dependencies: AppDependencies): Express {
   app.use(helmet());
   app.use(cors({ origin: dependencies.webOrigin, credentials: true }));
   app.use(express.json({ limit: '256kb' }));
+
+  const requireAuth = createRequireAuth(dependencies.config);
 
   app.get('/health/live', (_request, response) => {
     response.status(200).json({ status: 'ok' });
@@ -45,15 +49,26 @@ export function createApp(dependencies: AppDependencies): Express {
     }
   });
 
-  // Health & metrics routes
-  app.use('/health', createMetricsRouter({ prisma: dependencies.prisma, emailSyncQueue: dependencies.emailSyncQueue }));
+  // Health metrics (auth-protected: exposes system internals)
+  app.use(
+    '/health',
+    requireAuth,
+    createMetricsRouter({
+      prisma: dependencies.prisma,
+      emailSyncQueue: dependencies.emailSyncQueue,
+    }),
+  );
 
-  // Auth routes
-  app.use('/auth', createAuthRouter({ prisma: dependencies.prisma, config: dependencies.config }));
+  // Auth routes (OAuth public, /auth/me protected)
+  app.use(
+    '/auth',
+    createAuthRouter({ prisma: dependencies.prisma, config: dependencies.config, requireAuth }),
+  );
 
-  // Sync routes (manual trigger for development)
+  // Sync routes (manual trigger - auth-protected)
   app.use(
     '/sync',
+    requireAuth,
     createSyncRouter({
       prisma: dependencies.prisma,
       config: dependencies.config,
@@ -61,14 +76,33 @@ export function createApp(dependencies: AppDependencies): Express {
     }),
   );
 
-  // Webhook routes (for Pub/Sub push notifications)
+  // Webhook routes (for Pub/Sub push notifications - unauthenticated, validated by secret in Gmail webhook handler)
   app.use('/webhooks', createWebhookRouter({ emailSyncQueue: dependencies.emailSyncQueue }));
 
-  // Telegram routes (linking flow for dashboard)
-  app.use('/telegram', createTelegramRouter({ prisma: dependencies.prisma, config: dependencies.config }));
+  // Telegram routes (linking flow for dashboard - auth-protected)
+  app.use(
+    '/telegram',
+    requireAuth,
+    createTelegramRouter({ prisma: dependencies.prisma, config: dependencies.config }),
+  );
 
-  // Email routes (dashboard feed & SSE stream)
-  app.use('/emails', createEmailsRouter({ prisma: dependencies.prisma, config: dependencies.config }));
+  // Email routes (dashboard feed & SSE stream - auth-protected)
+  app.use(
+    '/emails',
+    requireAuth,
+    createEmailsRouter({ prisma: dependencies.prisma, config: dependencies.config }),
+  );
+
+  // Custom priority rules (auth-protected)
+  app.use(
+    '/rules',
+    requireAuth,
+    createRulesRouter({
+      prisma: dependencies.prisma,
+      config: dependencies.config,
+      emailRescanQueue: dependencies.emailRescanQueue,
+    }),
+  );
 
   return app;
 }

@@ -103,8 +103,14 @@ export async function validateAndLink(
   });
 
   if (existingChat && existingChat.userId !== link.userId) {
-    logger.warn({ chatId: String(chatId) }, 'Chat ID already linked to another user');
-    return null;
+    // Auto-unlink the old user and re-link to the new one
+    logger.info(
+      { chatId: String(chatId), oldUserId: existingChat.userId, newUserId: link.userId },
+      'Chat ID was linked to another user — auto-unlinking old user',
+    );
+    await prisma.telegramLink.delete({
+      where: { id: existingChat.id },
+    });
   }
 
   // Link the Telegram account

@@ -1,21 +1,14 @@
 /* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any */
 import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
-import type { Queue } from 'bullmq';
 
 import { createApp } from '../src/app.js';
+import { createTestToken, makeTestDeps } from './helpers.js';
 
 const mockPrisma = {
   user: { count: vi.fn().mockResolvedValue(5) },
   email: { count: vi.fn().mockResolvedValue(42) },
   watchRegistration: { count: vi.fn().mockResolvedValue(2) },
-} as any;
-
-const mockConfig = {
-  GOOGLE_CLIENT_ID: 'test-client-id',
-  GOOGLE_CLIENT_SECRET: 'test-secret',
-  GOOGLE_REDIRECT_URI: 'http://localhost:3000/auth/google/callback',
-  ENCRYPTION_KEY: Buffer.from('a'.repeat(32)).toString('base64'),
 } as any;
 
 const mockQueue = {
@@ -31,17 +24,23 @@ const mockQueue = {
 } as any;
 
 describe('metrics endpoints', () => {
-  it('returns JSON system metrics', async () => {
-    const app = createApp({
-      prisma: mockPrisma,
-      config: mockConfig,
-      checkPostgres: vi.fn(),
-      checkRedis: vi.fn(),
-      webOrigin: 'http://localhost:5173',
-      emailSyncQueue: mockQueue as Queue,
-    });
+  it('returns 401 without a token', async () => {
+    const app = createApp(makeTestDeps({ prisma: mockPrisma }));
 
     const response = await request(app).get('/health/metrics');
+
+    expect(response.status).toBe(401);
+  });
+
+  it('returns JSON system metrics with a valid token', async () => {
+    const deps = makeTestDeps({ prisma: mockPrisma });
+    deps.emailSyncQueue = mockQueue as any;
+    const app = createApp(deps);
+    const token = createTestToken('admin');
+
+    const response = await request(app)
+      .get('/health/metrics')
+      .set('Authorization', `Bearer ${token}`);
 
     expect(response.status).toBe(200);
     expect(response.body.status).toBe('healthy');

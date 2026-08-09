@@ -19,15 +19,15 @@ export function createSyncRouter(dependencies: SyncDependencies): Router {
   const { prisma, emailSyncQueue } = dependencies;
 
   /**
-   * POST /sync/:userId or /sync/user/:userId
-   * Manually trigger email sync for a user (useful for development/testing)
+   * POST /sync
+   * Manually trigger email sync for the authenticated user (useful for development/testing)
    */
-  router.post(['/:userId', '/user/:userId'], async (req: Request, res: Response) => {
+  router.post('/', async (req: Request, res: Response) => {
     try {
-      const { userId } = req.params;
+      const userId = req.userId;
 
       if (!userId || typeof userId !== 'string') {
-        return res.status(400).json({ error: 'Invalid userId' });
+        return res.status(401).json({ error: 'Not authenticated' });
       }
 
       // Verify user exists

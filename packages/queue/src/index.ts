@@ -32,5 +32,7 @@ export {
   type SyncUserEmailsJob,
   type ProcessEmailJob,
   type RenewWatchJob,
+  type ReminderCheckJob,
+  type RescanEmailsJob,
   QueueNames,
 } from './jobs.js';

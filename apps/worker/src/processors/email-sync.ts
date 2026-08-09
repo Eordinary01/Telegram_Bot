@@ -136,47 +136,39 @@ export async function processEmailSync(
           },
         });
 
-        if (!scoringResult.isAllowedDomain) {
-          filteredCount++;
-          logger.debug(
-            { messageId: message.messageId, domain: scoringResult.senderDomain },
-            'Email filtered by domain gate',
-          );
-        } else {
-          scoredCount++;
+        scoredCount++;
 
-          // Push Telegram notification for scored emails (all allowed domains)
-          pushScoredEmail(
-            prisma,
-            config.TELEGRAM_BOT_TOKEN,
-            userId,
-            {
-              from: message.from,
-              subject: message.subject,
-              snippet: message.snippet,
-              messageId: message.messageId,
-              priorityScore: scoringResult.priorityScore,
-              priorityLabel: scoringResult.priorityLabel,
-              priorityReasons: scoringResult.priorityReasons,
-              receivedAt: message.receivedAt instanceof Date ? message.receivedAt : new Date(message.receivedAt),
-            },
-          ).catch((pushError) => {
-            // Non-blocking: don't fail the sync if Telegram push fails
-            logger.error(
-              { error: pushError, messageId: message.messageId, userId },
-              'Failed to push Telegram notification',
-            );
-          });
-
-          logger.debug(
-            {
-              messageId: message.messageId,
-              score: scoringResult.priorityScore,
-              label: scoringResult.priorityLabel,
-            },
-            'Email scored',
+        // Push Telegram notification for scored emails (High/Medium priority)
+        pushScoredEmail(
+          prisma,
+          config.TELEGRAM_BOT_TOKEN,
+          userId,
+          {
+            from: message.from,
+            subject: message.subject,
+            snippet: message.snippet,
+            messageId: message.messageId,
+            priorityScore: scoringResult.priorityScore,
+            priorityLabel: scoringResult.priorityLabel,
+            priorityReasons: scoringResult.priorityReasons,
+            receivedAt: message.receivedAt instanceof Date ? message.receivedAt : new Date(message.receivedAt),
+          },
+        ).catch((pushError) => {
+          // Non-blocking: don't fail the sync if Telegram push fails
+          logger.error(
+            { error: pushError, messageId: message.messageId, userId },
+            'Failed to push Telegram notification',
           );
-        }
+        });
+
+        logger.debug(
+          {
+            messageId: message.messageId,
+            score: scoringResult.priorityScore,
+            label: scoringResult.priorityLabel,
+          },
+          'Email scored',
+        );
 
         // Update progress
         await job.updateProgress((syncedCount / messageIds.length) * 100);

@@ -1,8 +1,9 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import type { PrismaClient } from '@jecrc/database';
 import { scoreEmail } from '../src/scoring-engine.js';
 
 // Mock database rules
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function createMockPrisma(senderRules: any[] = [], keywordRules: any[] = []): PrismaClient {
   return {
     senderRule: {
@@ -18,25 +19,28 @@ describe('scoreEmail (integration-style)', () => {
   const ALLOWED_DOMAIN = 'jecrcu.edu.in';
   const USER_ID = 'test-user-1';
 
-  describe('Domain gate', () => {
-    it('rejects emails from non-allowed domains with low priority', async () => {
-      const prisma = createMockPrisma();
+  describe('Universal Mail Scoring', () => {
+    it('processes and scores emails from external domains like NPTEL', async () => {
+      const prisma = createMockPrisma(
+        [{ domain: 'nptel.iitm.ac.in', weight: 25, label: 'NPTEL Course' }],
+        [],
+      );
       const result = await scoreEmail(
         prisma,
         USER_ID,
-        'Spammer <spam@gmail.com>',
-        'Important message',
+        'NPTEL <newsletter@nptel.iitm.ac.in>',
+        'Important: Assignment Deadline',
         null,
         ALLOWED_DOMAIN,
       );
 
-      expect(result.isAllowedDomain).toBe(false);
-      expect(result.priorityScore).toBe(0);
-      expect(result.priorityLabel).toBe('low');
-      expect(result.priorityReasons).toContain('Sender domain not in allowed list');
+      expect(result.isAllowedDomain).toBe(true);
+      expect(result.priorityScore).toBe(25);
+      expect(result.priorityLabel).toBe('high');
+      expect(result.priorityReasons).toContain('NPTEL Course');
     });
 
-    it('allows emails from the exact allowed domain', async () => {
+    it('adds base university domain weight for primary domain senders', async () => {
       const prisma = createMockPrisma();
       const result = await scoreEmail(
         prisma,
@@ -49,6 +53,8 @@ describe('scoreEmail (integration-style)', () => {
 
       expect(result.isAllowedDomain).toBe(true);
       expect(result.senderDomain).toBe('jecrcu.edu.in');
+      expect(result.priorityScore).toBe(10);
+      expect(result.priorityReasons).toContain('University domain (jecrcu.edu.in)');
     });
   });
 
@@ -71,7 +77,8 @@ describe('scoreEmail (integration-style)', () => {
       );
 
       expect(result.isAllowedDomain).toBe(true);
-      expect(result.priorityScore).toBe(30);
+      // 10 base + 30 sender rule = 40
+      expect(result.priorityScore).toBe(40);
       expect(result.priorityLabel).toBe('high');
       expect(result.priorityReasons).toContain('Placement cell email');
     });
@@ -97,8 +104,8 @@ describe('scoreEmail (integration-style)', () => {
       );
 
       expect(result.isAllowedDomain).toBe(true);
-      // campus drive (25) + placement (20) = 45
-      expect(result.priorityScore).toBe(45);
+      // 10 base + 25 (campus drive) + 20 (placement) = 55
+      expect(result.priorityScore).toBe(55);
       expect(result.priorityLabel).toBe('high');
     });
   });
@@ -124,9 +131,9 @@ describe('scoreEmail (integration-style)', () => {
         ALLOWED_DOMAIN,
       );
 
-      // 30 (sender: placement cell) + 20 (keyword: placement) + 20 (keyword: interview) = 70
+      // 10 base + 30 (sender) + 20 (placement) + 20 (interview) = 80
       expect(result.isAllowedDomain).toBe(true);
-      expect(result.priorityScore).toBe(70);
+      expect(result.priorityScore).toBe(80);
       expect(result.priorityLabel).toBe('high');
     });
 
@@ -148,17 +155,18 @@ describe('scoreEmail (integration-style)', () => {
       );
 
       expect(result.isAllowedDomain).toBe(true);
-      expect(result.priorityScore).toBe(15);
-      expect(result.priorityLabel).toBe('medium');
+      // 10 base + 15 notice = 25 (>= 20 is high)
+      expect(result.priorityScore).toBe(25);
+      expect(result.priorityLabel).toBe('high');
     });
 
-    it('scores low priority for emails with no matching rules', async () => {
+    it('scores low priority for external email with no matching rules', async () => {
       const prisma = createMockPrisma([], []);
 
       const result = await scoreEmail(
         prisma,
         USER_ID,
-        'General <general@jecrcu.edu.in>',
+        'General <general@external.com>',
         'Weekly Newsletter',
         'This is a general newsletter',
         ALLOWED_DOMAIN,
@@ -167,7 +175,6 @@ describe('scoreEmail (integration-style)', () => {
       expect(result.isAllowedDomain).toBe(true);
       expect(result.priorityScore).toBe(0);
       expect(result.priorityLabel).toBe('low');
-      expect(result.priorityReasons).toContain('Allowed sender domain, no specific rules matched');
     });
   });
 });

@@ -16,6 +16,8 @@ const validEnvironment = {
   GOOGLE_CLIENT_SECRET: 'test-client-secret',
   GOOGLE_REDIRECT_URI: 'http://localhost:3000/auth/google/callback',
   ENCRYPTION_KEY: randomBytes(32).toString('base64'),
+  JWT_SECRET: 'this-is-a-test-jwt-secret-at-least-32-chars-long',
+  JWT_EXPIRES_IN: '24h',
   // Optional Pub/Sub fields
   GMAIL_PUSH_ENDPOINT: 'http://localhost:3000/webhooks/gmail',
   PUBSUB_TOPIC: 'projects/test-project/topics/gmail-push',
@@ -28,6 +30,7 @@ describe('getConfig', () => {
     expect(config.API_PORT).toBe(3000);
     expect(config.ALLOWED_SENDER_DOMAIN).toBe('jecrcu.edu.in');
     expect(config.GOOGLE_CLIENT_ID).toBe('test-client-id.apps.googleusercontent.com');
+    expect(config.JWT_SECRET).toBe('this-is-a-test-jwt-secret-at-least-32-chars-long');
   });
 
   it('accepts optional Pub/Sub configuration', () => {
