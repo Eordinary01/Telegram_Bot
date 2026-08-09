@@ -72,7 +72,18 @@ async function startTelegramBot(): Promise<void> {
 // Start the bot (non-blocking)
 void startTelegramBot();
 
+// --- Embedded Worker Setup (allows running API + Worker in 1 Free Web Service) ---
+if (process.env['ENABLE_EMBEDDED_WORKER'] !== 'false') {
+  try {
+    logger.info('Initializing embedded BullMQ queue worker...');
+    await import('../../worker/src/index.js');
+  } catch (workerErr) {
+    logger.warn({ error: workerErr }, 'Failed to initialize embedded worker');
+  }
+}
+
 // --- Express Server ---
+
 
 const server = app.listen(config.API_PORT, config.API_HOST, () => {
   logger.info({ host: config.API_HOST, port: config.API_PORT }, 'API server is listening');
