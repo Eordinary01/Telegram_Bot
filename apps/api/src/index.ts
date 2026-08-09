@@ -75,9 +75,11 @@ if (process.env['ENABLE_EMBEDDED_WORKER'] !== 'false') {
     logger.info('Initializing embedded BullMQ queue worker...');
     await import('../../worker/src/index.js');
   } catch (workerErr) {
-    logger.warn({ error: workerErr }, 'Failed to initialize embedded worker');
+    const errDetails = workerErr instanceof Error ? { message: workerErr.message, stack: workerErr.stack } : { err: String(workerErr) };
+    logger.warn({ error: errDetails }, 'Failed to initialize embedded worker');
   }
 }
+
 
 // --- Express Server ---
 

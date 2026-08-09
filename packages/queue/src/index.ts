@@ -3,13 +3,20 @@ import { Redis } from 'ioredis';
 let redisClient: Redis | undefined;
 
 export function getRedisClient(redisUrl: string): Redis {
-  redisClient ??= new Redis(redisUrl, {
+  const parsed = parseRedisConnection(redisUrl);
+  redisClient ??= new Redis({
+    host: parsed.host,
+    port: parsed.port,
+    username: parsed.username,
+    password: parsed.password,
+    tls: parsed.tls,
     lazyConnect: true,
     maxRetriesPerRequest: 1,
   });
   redisClient.on('error', () => undefined);
   return redisClient;
 }
+
 
 export async function checkRedisConnection(redisUrl: string): Promise<void> {
   const redis = getRedisClient(redisUrl);
