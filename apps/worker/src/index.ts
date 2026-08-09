@@ -2,7 +2,7 @@ import dns from 'node:dns';
 import { getConfig } from '@jecrc/config';
 import { checkPostgresConnection, disconnectPostgres, getPrismaClient } from '@jecrc/database';
 import { createLogger } from '@jecrc/observability';
-import { checkRedisConnection, disconnectRedis, QueueNames } from '@jecrc/queue';
+import { checkRedisConnection, disconnectRedis, QueueNames, parseRedisConnection } from '@jecrc/queue';
 
 // Force IPv4 first to prevent Windows IPv6 DNS connection timeouts to api.telegram.org
 dns.setDefaultResultOrder('ipv4first');
@@ -21,10 +21,8 @@ const prisma = getPrismaClient();
 await Promise.all([checkPostgresConnection(), checkRedisConnection(config.REDIS_URL)]);
 logger.info('Worker dependencies are ready');
 
-const redisConnection = {
-  host: new URL(config.REDIS_URL).hostname,
-  port: parseInt(new URL(config.REDIS_URL).port || '6379', 10),
-};
+const redisConnection = parseRedisConnection(config.REDIS_URL);
+
 
 // Create BullMQ worker for email sync
 const emailSyncWorker = new Worker<SyncUserEmailsJob>(

@@ -28,6 +28,28 @@ export async function disconnectRedis(): Promise<void> {
   }
 }
 
+export interface RedisConnectionOptions {
+  host: string;
+  port: number;
+  username?: string;
+  password?: string;
+  tls?: object;
+  maxRetriesPerRequest?: null | number;
+}
+
+export function parseRedisConnection(redisUrlStr: string): RedisConnectionOptions {
+  const url = new URL(redisUrlStr);
+  return {
+    host: url.hostname,
+    port: parseInt(url.port || '6379', 10),
+    ...(url.username ? { username: decodeURIComponent(url.username) } : {}),
+    ...(url.password ? { password: decodeURIComponent(url.password) } : {}),
+    ...(url.protocol === 'rediss:' ? { tls: {} } : {}),
+    maxRetriesPerRequest: null,
+  };
+}
+
+
 export {
   type SyncUserEmailsJob,
   type ProcessEmailJob,

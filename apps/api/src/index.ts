@@ -4,7 +4,7 @@ import { Telegraf } from 'telegraf';
 import { getConfig } from '@jecrc/config';
 import { checkPostgresConnection, disconnectPostgres, getPrismaClient } from '@jecrc/database';
 import { createLogger } from '@jecrc/observability';
-import { checkRedisConnection, disconnectRedis, QueueNames } from '@jecrc/queue';
+import { checkRedisConnection, disconnectRedis, QueueNames, parseRedisConnection } from '@jecrc/queue';
 import { Queue } from 'bullmq';
 import type { SyncUserEmailsJob, RescanEmailsJob } from '@jecrc/queue';
 import { configureBot, startBot, stopBot } from '@jecrc/telegram';
@@ -18,21 +18,18 @@ const config = getConfig();
 const logger = createLogger(config.LOG_LEVEL);
 const prisma = getPrismaClient();
 
+const redisConnection = parseRedisConnection(config.REDIS_URL);
+
 // Create BullMQ queue for email sync
 const emailSyncQueue = new Queue<SyncUserEmailsJob>(QueueNames.EMAIL_SYNC, {
-  connection: {
-    host: new URL(config.REDIS_URL).hostname,
-    port: parseInt(new URL(config.REDIS_URL).port || '6379', 10),
-  },
+  connection: redisConnection,
 });
 
 // Create BullMQ queue for re-scoring existing emails after rule changes
 const emailRescanQueue = new Queue<RescanEmailsJob>(QueueNames.EMAIL_RESCAN, {
-  connection: {
-    host: new URL(config.REDIS_URL).hostname,
-    port: parseInt(new URL(config.REDIS_URL).port || '6379', 10),
-  },
+  connection: redisConnection,
 });
+
 
 const app = createApp({
   prisma,
