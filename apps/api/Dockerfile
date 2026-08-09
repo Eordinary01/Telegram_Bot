@@ -14,7 +14,11 @@ COPY packages ./packages
 
 RUN pnpm install --frozen-lockfile
 
+# Generate Prisma Client artifacts inside container
+RUN pnpm --filter @jecrc/database exec prisma generate
+
 # Service to run: "api" or "worker" (passed at runtime via compose command)
+
 ENV SERVICE=api
 
 EXPOSE 3000
