@@ -135,9 +135,10 @@ describe('buildSmartButtons', () => {
     expect(buttons[0]![0]!.callback_data).toBe('acknowledge:msg-999');
     expect(buttons[0]![1]!.text).toContain('Snooze');
     expect(buttons[0]![1]!.callback_data).toBe('snooze_menu:msg-999');
-    expect(buttons[1]![0]!.text).toContain('Dismiss');
+    expect(buttons[1]![0]!.text).toMatch(/Not Interested|Dismiss/);
     expect(buttons[1]![0]!.callback_data).toBe('dismiss:msg-999');
   });
+
 
   it('should include google calendar link when provided', () => {
     const buttons = buildSmartButtons('msg-999', 'https://calendar.google.com/test');

@@ -50,10 +50,11 @@ export async function createOrUpdateUserFromOAuth(
         'Google OAuth login rejected: user email domain not allowed',
       );
       throw new Error(
-        `DOMAIN_RESTRICTED:Only Google accounts ending with @${domainLower} are permitted to sign in.`,
+        `DOMAIN_RESTRICTED:Access Restricted: Only authorized college email accounts (@${domainLower}) are permitted to sign in for now.`,
       );
     }
   }
+
 
   // Encrypt refresh token
   const encryptedData = encrypt(tokenResult.refreshToken, config.ENCRYPTION_KEY);

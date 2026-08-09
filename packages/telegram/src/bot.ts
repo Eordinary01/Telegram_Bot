@@ -369,28 +369,29 @@ export function configureBot(
       return;
     }
 
-    // 🔕 Dismiss — treat as intentional dismissal, stop reminders
-    if (data.startsWith('dismiss:')) {
-      const messageId = data.replace('dismiss:', '');
+    // 🚫 Dismiss / Not Interested — stop all reminders for this email
+    if (data.startsWith('dismiss:') || data.startsWith('not_interested:')) {
+      const messageId = data.replace(/^(dismiss|not_interested):/, '');
       try {
         await prisma.email.updateMany({
           where: { messageId },
-          data: { acknowledgedAt: new Date() },
+          data: { acknowledgedAt: new Date(), isUnread: false },
         });
-        await ctx.answerCbQuery('🔕 Email dismissed');
+        await ctx.answerCbQuery('🚫 Marked as Not Interested');
         if (ctx.callbackQuery.message?.text) {
           const originalText = ctx.callbackQuery.message.text;
           await ctx.editMessageText(
-            `${originalText}\n\n🔕 <i>Dismissed — no more reminders</i>`,
+            `${originalText}\n\n🚫 <i>Marked as Not Interested — reminders turned off</i>`,
             { parse_mode: 'HTML' },
           ).catch(() => {});
         }
       } catch (error) {
-        logger.error({ error, messageId }, 'Error dismissing email');
-        await ctx.answerCbQuery('❌ Failed to dismiss');
+        logger.error({ error, messageId }, 'Error marking email as not interested');
+        await ctx.answerCbQuery('❌ Failed to update status');
       }
       return;
     }
+
 
     // 👁️ Mark as Read (legacy backward compatibility)
     if (data.startsWith('mark_read:')) {

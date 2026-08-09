@@ -174,6 +174,25 @@ export async function pushScoredEmail(
     return false;
   }
 
+  // Deduplication check: skip if email was already notified or acknowledged (e.g. during manual web sync)
+  const existingEmail = await prisma.email.findUnique({
+    where: {
+      userId_messageId: {
+        userId,
+        messageId: email.messageId,
+      },
+    },
+    select: { acknowledgedAt: true, notifiedAt: true },
+  });
+
+  if (existingEmail?.acknowledgedAt || existingEmail?.notifiedAt) {
+    logger.info(
+      { userId, messageId: email.messageId, acknowledged: Boolean(existingEmail.acknowledgedAt) },
+      'Skipping Telegram notification: email already notified or acknowledged',
+    );
+    return false;
+  }
+
   const { message: formattedMessage, googleCalendarUrl } = formatEmailMessage(email);
 
   // Build smart inline action buttons (2 rows)
@@ -205,7 +224,7 @@ export async function pushScoredEmail(
  * Builds the smart inline keyboard layout for email notifications.
  *
  * Row 1: [✅ Acknowledge]  [⏰ Snooze ▾]
- * Row 2: [🔕 Dismiss]  [📅 Add to Cal] (if deadline exists)
+ * Row 2: [🚫 Not Interested]  [📅 Add to Cal] (if deadline exists)
  */
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function buildSmartButtons(messageId: string, googleCalendarUrl: string | null): any[][] {
@@ -217,7 +236,7 @@ export function buildSmartButtons(messageId: string, googleCalendarUrl: string |
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const row2: any[] = [
-    { text: '🔕 Dismiss', callback_data: `dismiss:${messageId}` },
+    { text: '🚫 Not Interested', callback_data: `dismiss:${messageId}` },
   ];
 
   if (googleCalendarUrl) {
@@ -226,6 +245,7 @@ export function buildSmartButtons(messageId: string, googleCalendarUrl: string |
 
   return [row1, row2];
 }
+
 
 /**
  * Formats an escalating reminder message based on the reminder count.

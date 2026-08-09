@@ -134,23 +134,29 @@ export function createAuthRouter(dependencies: AuthDependencies): Router {
         <!DOCTYPE html>
         <html>
           <head>
-            <title>Authentication Restricted</title>
+            <title>Access Restricted — Authorized College Email Required</title>
             <meta name="viewport" content="width=device-width, initial-scale=1.0">
           </head>
           <body style="font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif; text-align: center; padding: 60px 20px; background: #060910; color: #f1f5f9;">
-            <div style="max-width: 480px; margin: 0 auto; background: rgba(14, 20, 36, 0.85); border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 40px 30px; box-shadow: 0 20px 40px rgba(0,0,0,0.5);">
-              <div style="font-size: 48px; margin-bottom: 20px;">🔒</div>
-              <h1 style="color: #fb7185; font-size: 24px; margin-bottom: 12px;">${isDomainRestricted ? 'Domain Access Restricted' : 'Authentication Error'}</h1>
-              <p style="color: #94a3b8; font-size: 15px; line-height: 1.6; margin-bottom: 30px;">
-                ${userReason}
+            <div style="max-width: 480px; margin: 0 auto; background: rgba(15, 23, 42, 0.95); border: 1px solid rgba(239, 68, 68, 0.3); border-radius: 20px; padding: 40px 30px; box-shadow: 0 20px 40px rgba(0,0,0,0.6);">
+              <div style="font-size: 52px; margin-bottom: 16px;">🎓</div>
+              <h1 style="color: #f87171; font-size: 22px; font-weight: 700; margin-bottom: 12px;">${isDomainRestricted ? 'Authorized College Email Required' : 'Authentication Error'}</h1>
+              <div style="background: rgba(239, 68, 68, 0.1); border: 1px solid rgba(239, 68, 68, 0.2); border-radius: 12px; padding: 16px; margin-bottom: 24px;">
+                <p style="color: #fca5a5; font-size: 14px; line-height: 1.6; margin: 0;">
+                  ${userReason}
+                </p>
+              </div>
+              <p style="color: #94a3b8; font-size: 13px; line-height: 1.5; margin-bottom: 28px;">
+                Please sign out of your personal Google account and authenticate using your official <b>@jecrcu.edu.in</b> student email.
               </p>
               <a href="${config.WEB_ORIGIN}" style="display: inline-block; padding: 12px 28px; background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%); color: white; text-decoration: none; border-radius: 10px; font-weight: 600; font-size: 14px; box-shadow: 0 4px 14px rgba(59,130,246,0.3);">
-                Return to Login →
+                ← Back to Login
               </a>
             </div>
           </body>
         </html>
       `);
+
     }
   });
 
