@@ -49,8 +49,13 @@ export async function processEmailSync(
       throw new Error(`User ${userId} has no Gmail token`);
     }
 
-    if (!user.syncState) {
-      throw new Error(`User ${userId} has no sync state - watch not registered`);
+    let syncState = user.syncState;
+    if (!syncState) {
+      syncState = await prisma.syncState.upsert({
+        where: { userId },
+        create: { userId, lastHistoryId: '0' },
+        update: {},
+      });
     }
 
     // Check if user has added at least 3 custom rules before syncing emails
@@ -78,7 +83,7 @@ export async function processEmailSync(
     // Fetch history changes or fallback to recent messages
     let messageIds: string[] = [];
     try {
-      messageIds = await fetchHistoryChanges(oauth2Client, user.syncState.lastHistoryId);
+      messageIds = await fetchHistoryChanges(oauth2Client, syncState.lastHistoryId);
     } catch {
       logger.warn(
         { userId },
@@ -107,7 +112,7 @@ export async function processEmailSync(
     let syncedCount = 0;
     let scoredCount = 0;
     let filteredCount = 0;
-    let latestHistoryId = user.syncState.lastHistoryId;
+    let latestHistoryId = syncState.lastHistoryId;
 
     for (const messageId of messageIds) {
       try {

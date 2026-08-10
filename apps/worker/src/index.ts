@@ -100,13 +100,54 @@ await reminderQueue.add(
 );
 logger.info('Reminder check cron scheduled (every 1 minute for testing)');
 
+// Queue instance to enqueue periodic auto email sync jobs
+const emailSyncQueue = new Queue<SyncUserEmailsJob>(QueueNames.EMAIL_SYNC, {
+  connection: redisConnection,
+});
+
+// Periodic automatic background email sync (runs every 2 minutes)
+async function triggerAutoEmailSync(): Promise<void> {
+  try {
+    const usersWithTokens = await prisma.user.findMany({
+      where: {
+        gmailTokens: { some: {} },
+      },
+      select: { id: true },
+    });
+
+    for (const user of usersWithTokens) {
+      await emailSyncQueue.add(
+        `auto-sync-${user.id}`,
+        { userId: user.id, triggerSource: 'cron' },
+        {
+          jobId: `auto-sync-${user.id}-${Math.floor(Date.now() / (2 * 60 * 1000))}`,
+          removeOnComplete: true,
+          removeOnFail: true,
+        },
+      );
+    }
+    logger.debug({ userCount: usersWithTokens.length }, 'Triggered background auto email sync');
+  } catch (error) {
+    logger.error({ error }, 'Failed to trigger background auto email sync');
+  }
+}
+
+// Run auto-sync once immediately on worker start, then every 2 minutes
+void triggerAutoEmailSync();
+const autoSyncInterval = setInterval(() => {
+  void triggerAutoEmailSync();
+}, 2 * 60 * 1000); // Every 2 minutes
+logger.info('Periodic background email sync scheduled (every 2 minutes)');
+
 logger.info('Worker is running and waiting for jobs...');
 
 async function shutdown(signal: string): Promise<void> {
   logger.info({ signal }, 'Worker is shutting down');
+  clearInterval(autoSyncInterval);
   await emailSyncWorker.close();
   await reminderCheckWorker.close();
   await reminderQueue.close();
+  await emailSyncQueue.close();
   await emailRescanWorker.close();
   await Promise.all([disconnectPostgres(), disconnectRedis()]);
   process.exit();
