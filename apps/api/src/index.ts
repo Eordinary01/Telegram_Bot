@@ -88,6 +88,30 @@ const server = app.listen(config.API_PORT, config.API_HOST, () => {
   logger.info({ host: config.API_HOST, port: config.API_PORT }, 'API server is listening');
 });
 
+// --- Self-Keep-Alive pinger (prevents Render free-tier spin-down) ---
+const publicUrl =
+  process.env['RENDER_EXTERNAL_URL'] ||
+  process.env['SELF_PING_URL'] ||
+  process.env['PUBLIC_API_URL'];
+
+let keepAliveTimer: NodeJS.Timeout | undefined;
+
+if (publicUrl) {
+  const healthUrl = `${publicUrl.replace(/\/+$/, '')}/health/live`;
+  logger.info({ healthUrl }, 'Self keep-alive pinger activated (runs every 10 mins)');
+
+  keepAliveTimer = setInterval(() => {
+    fetch(healthUrl)
+      .then((res) => {
+        logger.debug({ status: res.status }, 'Self keep-alive ping successful');
+      })
+      .catch((err) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        logger.warn({ error: msg, healthUrl }, 'Self keep-alive ping failed');
+      });
+  }, 10 * 60 * 1000); // Ping every 10 minutes
+}
+
 let shuttingDown = false;
 
 function shutdown(signal: string): void {
@@ -96,6 +120,10 @@ function shutdown(signal: string): void {
   }
   shuttingDown = true;
   logger.info({ signal }, 'API server is shutting down');
+
+  if (keepAliveTimer) {
+    clearInterval(keepAliveTimer);
+  }
 
   server.close(async (error) => {
     try {
