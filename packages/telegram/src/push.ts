@@ -23,6 +23,7 @@ export function formatEmailMessage(email: {
   from: string;
   subject: string;
   snippet: string | null;
+  bodyText?: string | null;
   priorityScore: number;
   priorityLabel: string;
   priorityReasons: string[];
@@ -30,10 +31,7 @@ export function formatEmailMessage(email: {
   messageId: string;
 }): { message: string; googleCalendarUrl: string | null } {
   const escapeHtml = (str: string) =>
-    str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+    str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
   const cleanFrom = escapeHtml(email.from);
   const cleanSubject = escapeHtml(email.subject);
@@ -42,7 +40,7 @@ export function formatEmailMessage(email: {
   const priorityEmoji = PRIORITY_EMOJI[email.priorityLabel.toLowerCase()] ?? '⚪';
   const priorityBadge = `${priorityEmoji} ${email.priorityLabel.toUpperCase()} (Score: ${email.priorityScore})`;
 
-  const deadline = extractDeadline(email.subject, email.snippet);
+  const deadline = extractDeadline(email.subject, email.snippet, email.bodyText);
   const deadlineBadge = deadline.deadlineText
     ? `⏰ <b>Deadline:</b> <u>${escapeHtml(deadline.deadlineText)}</u>`
     : '';
@@ -121,10 +119,7 @@ export async function sendTelegramMessage(
         if (res.statusCode && res.statusCode >= 200 && res.statusCode < 300) {
           resolve(true);
         } else {
-          logger.error(
-            { chatId, status: res.statusCode, body },
-            'Failed to send Telegram message',
-          );
+          logger.error({ chatId, status: res.statusCode, body }, 'Failed to send Telegram message');
           resolve(false);
         }
       });
@@ -160,6 +155,7 @@ export async function pushScoredEmail(
     from: string;
     subject: string;
     snippet: string | null;
+    bodyText?: string | null;
     messageId: string;
     priorityScore: number;
     priorityLabel: string;
@@ -204,12 +200,14 @@ export async function pushScoredEmail(
 
   if (sent) {
     // Record that we notified the user about this email
-    await prisma.email.updateMany({
-      where: { messageId: email.messageId, userId },
-      data: { notifiedAt: new Date() },
-    }).catch((err) => {
-      logger.warn({ error: err, messageId: email.messageId }, 'Failed to set notifiedAt');
-    });
+    await prisma.email
+      .updateMany({
+        where: { messageId: email.messageId, userId },
+        data: { notifiedAt: new Date() },
+      })
+      .catch((err) => {
+        logger.warn({ error: err, messageId: email.messageId }, 'Failed to set notifiedAt');
+      });
 
     logger.info(
       { userId, messageId: email.messageId, priority: email.priorityLabel },
@@ -235,9 +233,7 @@ export function buildSmartButtons(messageId: string, googleCalendarUrl: string |
   ];
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const row2: any[] = [
-    { text: '🚫 Not Interested', callback_data: `dismiss:${messageId}` },
-  ];
+  const row2: any[] = [{ text: '🚫 Not Interested', callback_data: `dismiss:${messageId}` }];
 
   if (googleCalendarUrl) {
     row2.push({ text: '📅 Add to Calendar', url: googleCalendarUrl });
@@ -245,7 +241,6 @@ export function buildSmartButtons(messageId: string, googleCalendarUrl: string |
 
   return [row1, row2];
 }
-
 
 /**
  * Formats an escalating reminder message based on the reminder count.
@@ -265,10 +260,7 @@ export function formatReminderMessage(email: {
   reminderCount: number;
 }): string {
   const escapeHtml = (str: string) =>
-    str
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;');
+    str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
   const cleanSubject = escapeHtml(email.subject);
   const cleanFrom = escapeHtml(email.from.split('<')[0]?.trim() ?? email.from);
@@ -343,15 +335,17 @@ export async function pushReminder(
 
   if (sent) {
     // Increment reminder count and update notifiedAt for next interval calculation
-    await prisma.email.updateMany({
-      where: { messageId: email.messageId, userId },
-      data: {
-        reminderCount: email.reminderCount + 1,
-        notifiedAt: new Date(),
-      },
-    }).catch((err) => {
-      logger.warn({ error: err, messageId: email.messageId }, 'Failed to update reminder count');
-    });
+    await prisma.email
+      .updateMany({
+        where: { messageId: email.messageId, userId },
+        data: {
+          reminderCount: email.reminderCount + 1,
+          notifiedAt: new Date(),
+        },
+      })
+      .catch((err) => {
+        logger.warn({ error: err, messageId: email.messageId }, 'Failed to update reminder count');
+      });
 
     logger.info(
       { userId, messageId: email.messageId, reminderNumber: email.reminderCount + 1 },
@@ -361,4 +355,3 @@ export async function pushReminder(
 
   return sent;
 }
-

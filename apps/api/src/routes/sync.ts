@@ -44,6 +44,19 @@ export function createSyncRouter(dependencies: SyncDependencies): Router {
         return res.status(400).json({ error: 'User has not connected Gmail' });
       }
 
+      // Verify user has created at least 3 custom priority rules
+      const [userKeywordsCount, userSendersCount] = await Promise.all([
+        prisma.keywordRule.count({ where: { userId } }),
+        prisma.senderRule.count({ where: { userId } }),
+      ]);
+
+      const userRulesCount = userKeywordsCount + userSendersCount;
+      if (userRulesCount < 3) {
+        return res.status(400).json({
+          error: `You must add at least 3 custom priority rules before syncing emails (${userRulesCount}/3 added).`,
+        });
+      }
+
       // Queue sync job
       const job = await emailSyncQueue.add(
         'sync-user-emails',

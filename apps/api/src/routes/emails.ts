@@ -55,6 +55,29 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
           orderBy: { receivedAt: 'desc' },
           take,
           skip,
+          select: {
+            id: true,
+            userId: true,
+            messageId: true,
+            threadId: true,
+            from: true,
+            subject: true,
+            snippet: true,
+            receivedAt: true,
+            isUnread: true,
+            labels: true,
+            senderDomain: true,
+            priorityScore: true,
+            priorityLabel: true,
+            priorityReasons: true,
+            deadlineAt: true,
+            deadlineText: true,
+            notifiedAt: true,
+            acknowledgedAt: true,
+            reminderCount: true,
+            snoozedUntil: true,
+            createdAt: true,
+          },
         }),
         prisma.email.count({ where }),
       ]);
@@ -160,6 +183,13 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
 
       if (!userId) {
         return res.status(401).json({ error: 'Not authenticated' });
+      }
+
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user || user.email.toLowerCase() !== 'parth.23bcon0051@jecrcu.edu.in') {
+        return res
+          .status(403)
+          .json({ error: 'Developer tools are restricted to authorized accounts.' });
       }
 
       const randomId = Math.random().toString(36).substring(7);
@@ -268,6 +298,13 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
 
       if (!userId) {
         return res.status(401).json({ error: 'Not authenticated' });
+      }
+
+      const user = await prisma.user.findUnique({ where: { id: userId } });
+      if (!user || user.email.toLowerCase() !== 'parth.23bcon0051@jecrcu.edu.in') {
+        return res
+          .status(403)
+          .json({ error: 'Developer tools are restricted to authorized accounts.' });
       }
 
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

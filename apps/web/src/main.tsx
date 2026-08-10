@@ -6,6 +6,7 @@ import { EmailCard, type EmailData } from './components/EmailCard';
 import { TelegramModal } from './components/TelegramModal';
 import { RulesPanel } from './components/RulesPanel';
 import { ThemePicker, initializeTheme } from './components/ThemePicker';
+import { ServerWakeupCard } from './components/ServerWakeupCard';
 import { api, getToken, setToken, clearToken, streamUrl, API_URL } from './lib/api';
 
 // Initialize theme from localStorage on app boot
@@ -31,6 +32,8 @@ interface Stats {
 function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
+  const [isServerSleeping, setIsServerSleeping] = useState(false);
+  const [manualWakeupPreview, setManualWakeupPreview] = useState(false);
   const [emails, setEmails] = useState<EmailData[]>([]);
   const [stats, setStats] = useState<Stats>({
     total: 0,
@@ -53,7 +56,26 @@ function App() {
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [showDevTools, setShowDevTools] = useState(false);
 
-  // On first load, capture the auth token from the OAuth redirect query
+  const checkUserAuth = useCallback(async () => {
+    const token = getToken();
+    if (!token) {
+      setAuthLoading(false);
+      return;
+    }
+
+    try {
+      const data = await api<User>('/auth/me');
+      setUser(data);
+      setIsServerSleeping(false);
+    } catch (err) {
+      // If error occurs or token is invalid, clear token
+      clearToken();
+    } finally {
+      setAuthLoading(false);
+    }
+  }, []);
+
+  // On first load, capture the auth token from the OAuth redirect query and check health/auth
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const tokenFromUrl = urlParams.get('token');
@@ -64,18 +86,15 @@ function App() {
       window.history.replaceState({}, '', window.location.pathname);
     }
 
-    const token = getToken();
+    // Set a timer: if auth takes > 1.2s, backend is likely sleeping on Render free tier
+    const sleepTimer = setTimeout(() => {
+      setIsServerSleeping(true);
+    }, 1200);
 
-    if (!token) {
-      setAuthLoading(false);
-      return;
-    }
-
-    api<User>('/auth/me')
-      .then((data) => setUser(data))
-      .catch(() => clearToken())
-      .finally(() => setAuthLoading(false));
-  }, []);
+    checkUserAuth().finally(() => {
+      clearTimeout(sleepTimer);
+    });
+  }, [checkUserAuth]);
 
   // Fetch emails, stats, rules, and link status
   const fetchData = useCallback(() => {
@@ -135,8 +154,11 @@ function App() {
     };
   }, [user, fetchData]);
 
+  const DEV_EMAIL = 'parth.23bcon0051@jecrcu.edu.in';
+  const isDevUser = user?.email?.toLowerCase() === DEV_EMAIL.toLowerCase();
+
   const handleInjectTest = async (type: string = 'placement') => {
-    if (!user) return;
+    if (!user || !isDevUser) return;
     try {
       await api('/emails/inject-test', { method: 'POST', body: { type } });
       fetchData();
@@ -146,7 +168,7 @@ function App() {
   };
 
   const handleClearTestEmails = async () => {
-    if (!user) return;
+    if (!user || !isDevUser) return;
     try {
       await api('/emails/clear-test?all=true', { method: 'DELETE' });
       fetchData();
@@ -157,6 +179,12 @@ function App() {
 
   const handleSyncNow = async () => {
     if (!user) return;
+
+    if (userRulesCount < 3) {
+      setShowRulesPanel(true);
+      return;
+    }
+
     setSyncing(true);
     try {
       await api('/sync', { method: 'POST' });
@@ -178,7 +206,18 @@ function App() {
   const isStep2Done = userRulesCount >= 3;
   const completedStepsCount = (isStep1Done ? 1 : 0) + (isStep2Done ? 1 : 0);
 
-  // Loading screen
+  // Loading / Server Wakeup screen
+  if (isServerSleeping && authLoading) {
+    return (
+      <ServerWakeupCard
+        onReady={() => {
+          setIsServerSleeping(false);
+          checkUserAuth();
+        }}
+      />
+    );
+  }
+
   if (authLoading) {
     return (
       <div className="app-shell loading-screen">
@@ -193,7 +232,14 @@ function App() {
   // Login page
   if (!user) {
     return (
-      <main className="login-page">
+      <>
+        {manualWakeupPreview && (
+          <ServerWakeupCard
+            isManualTesting={true}
+            onCloseManual={() => setManualWakeupPreview(false)}
+          />
+        )}
+        <main className="login-page">
         <section className="glass-card login-card">
           <div className="login-brand-icon">📧</div>
           <h1 className="login-title">JECRC Mail Priority Sync</h1>
@@ -254,6 +300,7 @@ function App() {
           </a>
         </section>
       </main>
+    </>
     );
   }
 
@@ -465,21 +512,34 @@ function App() {
           <button className="btn btn-secondary btn-sm" onClick={() => setShowTelegramModal(true)}>
             ✈️ {telegramLinked ? 'Telegram' : 'Link Telegram'}
           </button>
-          <button className="btn btn-primary btn-sm" onClick={handleSyncNow} disabled={syncing}>
-            {syncing ? 'Syncing...' : '🔄 Sync Now'}
-          </button>
           <button
-            className="dev-tools-toggle"
-            onClick={() => setShowDevTools(!showDevTools)}
+            className="btn btn-primary btn-sm"
+            onClick={handleSyncNow}
+            disabled={syncing}
+            title={userRulesCount < 3 ? 'Add 3 priority rules to unlock sync' : 'Sync latest inbox messages'}
           >
-            🧪 Dev {showDevTools ? '▲' : '▼'}
+            {syncing ? 'Syncing...' : userRulesCount < 3 ? `⚙️ Add Rules to Sync (${userRulesCount}/3)` : '🔄 Sync Now'}
           </button>
+          {isDevUser && (
+            <button
+              className="dev-tools-toggle"
+              onClick={() => setShowDevTools(!showDevTools)}
+            >
+              🧪 Dev {showDevTools ? '▲' : '▼'}
+            </button>
+          )}
         </div>
       </div>
 
-      {/* Dev Tools (collapsible) */}
-      {showDevTools && (
+      {/* Dev Tools (collapsible - only for authorized dev email) */}
+      {isDevUser && showDevTools && (
         <div className="dev-tools-panel" style={{ marginBottom: '1.25rem' }}>
+          <button
+            className="btn btn-secondary btn-sm"
+            onClick={() => setManualWakeupPreview(true)}
+          >
+            😴 Preview 3D Wakeup Card
+          </button>
           <button
             className="btn btn-secondary btn-sm"
             onClick={() => handleInjectTest('placement')}
@@ -499,6 +559,13 @@ function App() {
             🗑️ Clear Test Emails
           </button>
         </div>
+      )}
+
+      {manualWakeupPreview && (
+        <ServerWakeupCard
+          isManualTesting={true}
+          onCloseManual={() => setManualWakeupPreview(false)}
+        />
       )}
 
       {/* Feed Header */}
@@ -523,16 +590,28 @@ function App() {
           ))
         ) : (
           <div className="glass-card empty-state">
-            <div className="empty-icon">📭</div>
-            <h3 className="empty-title">No emails found</h3>
+            <div className="empty-icon">{userRulesCount < 3 ? '⚙️' : '📭'}</div>
+            <h3 className="empty-title">
+              {userRulesCount < 3 ? '3 Priority Rules Required' : 'No emails found'}
+            </h3>
             <p className="empty-description">
-              {searchTerm
+              {userRulesCount < 3
+                ? `You must configure at least 3 priority rules before syncing emails (${userRulesCount}/3 created).`
+                : searchTerm
                 ? 'No emails match your search filter. Try adjusting your keywords.'
                 : 'Click "Sync Now" to fetch recent messages from your connected @jecrcu.edu.in account.'}
             </p>
             {!searchTerm && (
-              <button className="btn btn-primary" onClick={handleSyncNow} disabled={syncing}>
-                {syncing ? 'Syncing...' : '🔄 Sync Now'}
+              <button
+                className="btn btn-primary"
+                onClick={() => (userRulesCount < 3 ? setShowRulesPanel(true) : handleSyncNow())}
+                disabled={syncing}
+              >
+                {userRulesCount < 3
+                  ? `➕ Add Priority Rules (${userRulesCount}/3)`
+                  : syncing
+                  ? 'Syncing...'
+                  : '🔄 Sync Now'}
               </button>
             )}
           </div>

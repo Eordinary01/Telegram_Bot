@@ -38,9 +38,11 @@ describe('processEmailRescan', () => {
     mockPrisma.email.findMany.mockResolvedValue([
       {
         id: 'e1',
+        messageId: 'm1',
         from: 'placement@jecrcu.edu.in',
         subject: 'Campus Placement Drive by Deloitte',
         snippet: 'Mandatory registration for placement drive.',
+        bodyText: 'Register before 15/08/2026.',
         senderDomain: 'jecrcu.edu.in',
       },
     ]);
@@ -57,20 +59,49 @@ describe('processEmailRescan', () => {
     expect(updateArgs?.data?.priorityLabel).toBe('high');
   });
 
-  it('only queries emails that passed the domain gate', async () => {
-    mockPrisma.email.findMany.mockResolvedValue([]);
+  it('persists an extracted deadline during re-score', async () => {
+    mockPrisma.email.findMany.mockResolvedValue([
+      {
+        id: 'e2',
+        messageId: 'm2',
+        from: 'placement@jecrcu.edu.in',
+        subject: 'NPTEL: Intro to Machine Learning - Week 4',
+        snippet: 'Intro to ML week 4 assignment',
+        bodyText: 'the assignment has to be submitted on or before wednesday 19-08-2026',
+        senderDomain: 'jecrcu.edu.in',
+      },
+    ]);
+    mockPrisma.email.update.mockResolvedValue({});
 
     const result = await processEmailRescan(mockJob, mockPrisma, config);
 
-    expect(result.total).toBe(0);
-    expect(mockPrisma.email.findMany).toHaveBeenCalledWith(
-      expect.objectContaining({
-        where: expect.objectContaining({
-          userId: 'user-1',
-          senderDomain: { not: null },
-        }),
-      }),
-    );
-    expect(mockPrisma.email.update).not.toHaveBeenCalled();
+    expect(result.total).toBe(1);
+    const updateArgs = mockPrisma.email.update.mock.calls[0]?.[0];
+    expect(updateArgs?.data?.deadlineText).toContain('19-08-2026');
+    expect(updateArgs?.data?.deadlineAt).toBeInstanceOf(Date);
+  });
+
+  it('persists a deadline for non-gated emails without re-scoring', async () => {
+    mockPrisma.email.findMany.mockResolvedValue([
+      {
+        id: 'e3',
+        messageId: 'm3',
+        from: 'noreply@nptel.iitm.ac.in',
+        subject: 'NPTEL: Intro to Machine Learning - Week 4',
+        snippet: 'Week 4 assignment',
+        bodyText: 'the assignment has to be submitted on or before wednesday 19-08-2026',
+        senderDomain: null,
+      },
+    ]);
+    mockPrisma.email.update.mockResolvedValue({});
+
+    const result = await processEmailRescan(mockJob, mockPrisma, config);
+
+    expect(result.total).toBe(1);
+    expect(result.updated).toBe(1);
+    const updateArgs = mockPrisma.email.update.mock.calls[0]?.[0];
+    expect(updateArgs?.data?.priorityScore).toBeUndefined();
+    expect(updateArgs?.data?.deadlineText).toContain('19-08-2026');
+    expect(updateArgs?.data?.deadlineAt).toBeInstanceOf(Date);
   });
 });

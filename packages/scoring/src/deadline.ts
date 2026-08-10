@@ -9,44 +9,126 @@ export interface ExtractedDeadline {
 }
 
 const MONTH_MAP: Record<string, number> = {
-  jan: 0, january: 0,
-  feb: 1, february: 1,
-  mar: 2, march: 2,
-  apr: 3, april: 3,
+  jan: 0,
+  january: 0,
+  feb: 1,
+  february: 1,
+  mar: 2,
+  march: 2,
+  apr: 3,
+  april: 3,
   may: 4,
-  jun: 5, june: 5,
-  jul: 6, july: 6,
-  aug: 7, august: 7,
-  sep: 8, september: 8,
-  oct: 9, october: 9,
-  nov: 10, november: 10,
-  dec: 11, december: 11,
+  jun: 5,
+  june: 5,
+  jul: 6,
+  july: 6,
+  aug: 7,
+  august: 7,
+  sep: 8,
+  september: 8,
+  oct: 9,
+  october: 9,
+  nov: 10,
+  november: 10,
+  dec: 11,
+  december: 11,
 };
 
+const WEEKDAYS =
+  /(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday|mon|tue|tues|wed|thu|thur|thurs|fri|sat|sun)/i;
+
+const MONTH_NAMES =
+  /(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)/i;
+
 /**
- * Extracts a deadline date and text from email subject & snippet,
+ * Extracts a deadline date and text from email subject, snippet & body,
  * and generates a Google Calendar template URL if a valid date is found.
  */
 export function extractDeadline(
   subject: string,
   snippet: string | null,
+  bodyText?: string | null,
 ): ExtractedDeadline {
-  const text = `${subject} ${snippet ?? ''}`;
+  const text = `${subject} ${snippet ?? ''} ${bodyText ?? ''}`;
 
-  // Patterns matching keywords followed by date expressions
-  // e.g. "deadline: 30th July", "due by 15/08/2026", "last date 25 August 5 PM"
-  const deadlineRegex =
-    /(?:deadline|due|last date|submit by|submission date|before)\s*(?:is|on|by|:)?\s*([0-9]{1,2}(?:st|nd|rd|th)?\s+[A-Za-z]{3,9}(?:\s+[0-9]{4})?|[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4}|\btomorrow\b|\btoday\b)(?:\s+(?:by|at)?\s*([0-9]{1,2}(?::[0-9]{2})?\s*(?:am|pm|a\.m\.|p\.m\.)?))?/i;
+  // Primary Regex: Trigger phrase followed by optional connector & filler words (up to ~30 chars), optional weekday, then date.
+  const deadlineRegex = new RegExp(
+    [
+      '(?:deadline|last date|due date|due|submit by|submission date|submission|on or before|before|by)',
+      '(?:\\s*(?:for|of|to|is|on|by|at|set|until|till|:|-)*[a-z0-9_ -]{0,30}?\\b)?',
+      '\\s*',
+      '(?:',
+      WEEKDAYS.source,
+      '(?:,\\s*|\\s+)?',
+      ')?',
+      '(',
+      // 30th July / 30 July 2026
+      '[0-9]{1,2}(?:st|nd|rd|th)?\\s+',
+      MONTH_NAMES.source,
+      '(?:\\s*,?\\s+[0-9]{4})?',
+      '|',
+      // August 19, 2026 / Aug 19 2026 (month-first)
+      MONTH_NAMES.source,
+      '\\s+[0-9]{1,2}(?:st|nd|rd|th)?',
+      '(?:\\s*,?\\s+[0-9]{4})?',
+      '|',
+      // YYYY-MM-DD or YYYY/MM/DD
+      '[0-9]{4}[/-][0-9]{1,2}[/-][0-9]{1,2}',
+      '|',
+      // 15/08/2026 or 15-08-2026
+      '[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4}',
+      '|',
+      '\\btomorrow\\b|\\btoday\\b',
+      ')',
+      '(?:\\s+(?:by|at)?\\s*([0-9]{1,2}(?::[0-9]{2})?\\s*(?:am|pm|a\\.m\\.|p\\.m\\.)?))?',
+    ].join(''),
+    'i',
+  );
 
-  const match = text.match(deadlineRegex);
+  let match = text.match(deadlineRegex);
+  let rawDateStr = match ? match[1] ?? '' : '';
+  let rawTimeStr = match ? match[2] : undefined;
+  let fullMatchedText = match ? (match[0] ?? '').trim() : '';
 
-  if (!match) {
-    return { deadlineText: null, date: null, googleCalendarUrl: null };
+  // Fallback: If primary regex did not match a valid date, but the text contains a deadline keyword,
+  // scan for standalone date pattern.
+  if (!match || !rawDateStr) {
+    const hasKeyword = /(?:deadline|last date|due date|due|submit|submission|on or before)/i.test(
+      text,
+    );
+    if (hasKeyword) {
+      const standaloneDateRegex = new RegExp(
+        [
+          '(?:',
+          WEEKDAYS.source,
+          '(?:,\\s*|\\s+)?',
+          ')?',
+          '(',
+          '[0-9]{1,2}(?:st|nd|rd|th)?\\s+',
+          MONTH_NAMES.source,
+          '(?:\\s*,?\\s+[0-9]{4})?',
+          '|',
+          MONTH_NAMES.source,
+          '\\s+[0-9]{1,2}(?:st|nd|rd|th)?',
+          '(?:\\s*,?\\s+[0-9]{4})?',
+          '|',
+          '[0-9]{4}[/-][0-9]{1,2}[/-][0-9]{1,2}',
+          '|',
+          '[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4}',
+          ')',
+          '(?:\\s+(?:by|at)?\\s*([0-9]{1,2}(?::[0-9]{2})?\\s*(?:am|pm|a\\.m\\.|p\\.m\\.)?))?',
+        ].join(''),
+        'i',
+      );
+
+      const fallbackMatch = text.match(standaloneDateRegex);
+      if (fallbackMatch && fallbackMatch[1]) {
+        rawDateStr = fallbackMatch[1];
+        rawTimeStr = fallbackMatch[2];
+        fullMatchedText = fallbackMatch[0].trim();
+      }
+    }
   }
-
-  const rawDateStr = match[1] ?? '';
-  const rawTimeStr = match[2];
-  const fullMatchedText = (match[0] ?? '').trim();
 
   if (!rawDateStr) {
     return { deadlineText: null, date: null, googleCalendarUrl: null };
@@ -67,11 +149,14 @@ export function extractDeadline(
 }
 
 /**
- * Parses relative terms ("today", "tomorrow") or date strings like "30th July", "15-08-2026".
+ * Parses relative terms ("today", "tomorrow") or date strings like "30th July", "15-08-2026", "2026-08-15".
  */
 function parseRelativeOrExplicitDate(dateStr: string, timeStr?: string): Date | null {
   const now = new Date();
-  const cleanDate = dateStr.toLowerCase().replace(/(st|nd|rd|th)/g, '').trim();
+  const cleanDate = dateStr
+    .toLowerCase()
+    .replace(/([0-9]{1,2})(?:st|nd|rd|th)\b/g, '$1')
+    .trim();
 
   let year = now.getFullYear();
   let month = now.getMonth();
@@ -82,41 +167,55 @@ function parseRelativeOrExplicitDate(dateStr: string, timeStr?: string): Date | 
   } else if (cleanDate === 'tomorrow') {
     day += 1;
   } else {
+    // Try YYYY-MM-DD or YYYY/MM/DD (ISO format)
+    const isoMatch = cleanDate.match(/^([0-9]{4})[/-]([0-9]{1,2})[/-]([0-9]{1,2})$/);
     // Try DD/MM/YYYY or DD-MM-YYYY
     const numericMatch = cleanDate.match(/^([0-9]{1,2})[/-]([0-9]{1,2})[/-]([0-9]{2,4})$/);
-    if (numericMatch) {
+    // Try "30 July" / "30 July 2026"
+    const textMatch = cleanDate.match(/^([0-9]{1,2})\s+([a-z]{3,9})(?:\s+([0-9]{4}))?$/);
+    // Try "August 19, 2026" / "Aug 19 2026" (month-first)
+    const monthFirstMatch = cleanDate.match(
+      /^([a-z]{3,9})\s+([0-9]{1,2})(?:\s*,?\s+([0-9]{4}))?$/,
+    );
+
+    if (isoMatch) {
+      const yearStr = isoMatch[1];
+      const monthStr = isoMatch[2];
+      const dayStr = isoMatch[3];
+      if (!yearStr || !monthStr || !dayStr) return null;
+      year = parseInt(yearStr, 10);
+      month = parseInt(monthStr, 10) - 1;
+      day = parseInt(dayStr, 10);
+    } else if (numericMatch) {
       const dayStr = numericMatch[1];
       const monthStr = numericMatch[2];
       const yearStr = numericMatch[3];
       if (!dayStr || !monthStr || !yearStr) return null;
-
       day = parseInt(dayStr, 10);
       month = parseInt(monthStr, 10) - 1;
       let yr = parseInt(yearStr, 10);
       if (yr < 100) yr += 2000;
       year = yr;
+    } else if (textMatch) {
+      const dayStr = textMatch[1];
+      const monthName = textMatch[2];
+      if (!dayStr || !monthName) return null;
+      day = parseInt(dayStr, 10);
+      const mappedMonth = MONTH_MAP[monthName];
+      if (mappedMonth === undefined) return null;
+      month = mappedMonth;
+      if (textMatch[3]) year = parseInt(textMatch[3], 10);
+    } else if (monthFirstMatch) {
+      const monthName = monthFirstMatch[1];
+      const dayStr = monthFirstMatch[2];
+      if (!dayStr || !monthName) return null;
+      const mappedMonth = MONTH_MAP[monthName];
+      if (mappedMonth === undefined) return null;
+      day = parseInt(dayStr, 10);
+      month = mappedMonth;
+      if (monthFirstMatch[3]) year = parseInt(monthFirstMatch[3], 10);
     } else {
-      // Try "30 July" or "30 July 2026"
-      const textMatch = cleanDate.match(/^([0-9]{1,2})\s+([a-z]{3,9})(?:\s+([0-9]{4}))?$/);
-      if (textMatch) {
-        const dayStr = textMatch[1];
-        const monthName = textMatch[2];
-        if (!dayStr || !monthName) return null;
-
-        day = parseInt(dayStr, 10);
-        const mappedMonth = MONTH_MAP[monthName];
-        if (mappedMonth !== undefined) {
-          month = mappedMonth;
-        } else {
-          return null;
-        }
-        const yearStr = textMatch[3];
-        if (yearStr) {
-          year = parseInt(yearStr, 10);
-        }
-      } else {
-        return null;
-      }
+      return null;
     }
   }
 
@@ -125,7 +224,9 @@ function parseRelativeOrExplicitDate(dateStr: string, timeStr?: string): Date | 
   let minutes = 0;
 
   if (timeStr) {
-    const timeMatch = timeStr.toLowerCase().match(/^([0-9]{1,2})(?::([0-9]{2}))?\s*(am|pm|a\.m\.|p\.m\.)?$/);
+    const timeMatch = timeStr
+      .toLowerCase()
+      .match(/^([0-9]{1,2})(?::([0-9]{2}))?\s*(am|pm|a\.m\.|p\.m\.)?$/);
     if (timeMatch) {
       const hourStr = timeMatch[1];
       if (!hourStr) return null;
@@ -149,21 +250,18 @@ function parseRelativeOrExplicitDate(dateStr: string, timeStr?: string): Date | 
 /**
  * Generates a pre-filled Google Calendar event URL.
  */
-export function generateGoogleCalendarUrl(
-  title: string,
-  details: string,
-  startDate: Date,
-): string {
+export function generateGoogleCalendarUrl(title: string, details: string, startDate: Date): string {
   const endDate = new Date(startDate.getTime() + 60 * 60 * 1000);
 
-  const formatCalDate = (d: Date) =>
-    d.toISOString().replace(/-|:|\.\d\d\d/g, '');
+  const formatCalDate = (d: Date) => d.toISOString().replace(/-|:|\.\d\d\d/g, '');
 
   const startStr = formatCalDate(startDate);
   const endStr = formatCalDate(endDate);
 
   const cleanTitle = encodeURIComponent(`[JECRC Deadline] ${title}`);
-  const cleanDetails = encodeURIComponent(`Notification via JECRC Mail Priority Bot.\n\n${details.substring(0, 500)}`);
+  const cleanDetails = encodeURIComponent(
+    `Notification via JECRC Mail Priority Bot.\n\n${details.substring(0, 500)}`,
+  );
 
   return `https://calendar.google.com/calendar/render?action=TEMPLATE&text=${cleanTitle}&details=${cleanDetails}&dates=${startStr}/${endStr}`;
 }

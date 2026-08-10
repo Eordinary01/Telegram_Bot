@@ -9,7 +9,7 @@ export function getRedisClient(redisUrl: string): Redis {
     port: parsed.port,
     username: parsed.username,
     password: parsed.password,
-    tls: parsed.tls,
+    ...(parsed.tls ? { tls: parsed.tls } : {}),
     lazyConnect: true,
     maxRetriesPerRequest: 1,
   });
@@ -46,12 +46,13 @@ export interface RedisConnectionOptions {
 
 export function parseRedisConnection(redisUrlStr: string): RedisConnectionOptions {
   const url = new URL(redisUrlStr);
+  const isTls = url.protocol === 'rediss:' || url.hostname.includes('upstash.io');
   return {
     host: url.hostname,
     port: parseInt(url.port || '6379', 10),
     ...(url.username ? { username: decodeURIComponent(url.username) } : {}),
     ...(url.password ? { password: decodeURIComponent(url.password) } : {}),
-    ...(url.protocol === 'rediss:' ? { tls: {} } : {}),
+    ...(isTls ? { tls: {} } : {}),
     maxRetriesPerRequest: null,
   };
 }

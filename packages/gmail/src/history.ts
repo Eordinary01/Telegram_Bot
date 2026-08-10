@@ -12,6 +12,7 @@ export interface GmailMessage {
   from: string;
   subject: string;
   snippet: string;
+  bodyText: string;
   receivedAt: Date;
   isUnread: boolean;
   labels: string[];
@@ -20,7 +21,11 @@ export interface GmailMessage {
 /**
  * Helper to execute an async operation with exponential backoff on 429/5xx errors.
  */
-async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDelayMs = 500): Promise<T> {
+async function withRetry<T>(
+  fn: () => Promise<T>,
+  maxRetries = 3,
+  initialDelayMs = 500,
+): Promise<T> {
   let attempt = 0;
   while (true) {
     try {
@@ -28,14 +33,18 @@ async function withRetry<T>(fn: () => Promise<T>, maxRetries = 3, initialDelayMs
     } catch (error: any) {
       attempt++;
       const status = error?.code || error?.status || error?.response?.status;
-      const isRetryable = status === 429 || (typeof status === 'number' && status >= 500 && status < 600);
+      const isRetryable =
+        status === 429 || (typeof status === 'number' && status >= 500 && status < 600);
 
       if (!isRetryable || attempt > maxRetries) {
         throw error;
       }
 
       const delay = initialDelayMs * Math.pow(2, attempt - 1) + Math.random() * 100;
-      logger.warn({ attempt, status, delayMs: Math.round(delay) }, 'Retrying Gmail API call after rate limit or server error');
+      logger.warn(
+        { attempt, status, delayMs: Math.round(delay) },
+        'Retrying Gmail API call after rate limit or server error',
+      );
       await new Promise((resolve) => setTimeout(resolve, delay));
     }
   }
@@ -120,6 +129,74 @@ export async function fetchRecentMessages(
 }
 
 /**
+ * Recursively extracts plain-text content from a Gmail message payload.
+ * Prefers text/plain over text/html; falls back to stripping HTML tags.
+ */
+export function extractBodyText(payload: GmailMessagePart | undefined): string {
+  if (!payload) return '';
+
+  const data = payload.body?.data;
+  if (data && payload.mimeType === 'text/plain') {
+    try {
+      return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString('utf-8');
+    } catch {
+      // Fall through to parts
+    }
+  }
+
+  if (Array.isArray(payload.parts) && payload.parts.length > 0) {
+    // For multipart/alternative, prefer the plain-text part if present
+    const isAlternative = payload.mimeType === 'multipart/alternative';
+    const candidates = isAlternative
+      ? [...payload.parts].sort((a, b) => {
+          const rank = (m: string | null | undefined) =>
+            m === 'text/plain' ? 0 : m === 'text/html' ? 1 : 2;
+          return rank(a.mimeType) - rank(b.mimeType);
+        })
+      : payload.parts;
+
+    const results: string[] = [];
+    for (const part of candidates) {
+      const text = extractBodyText(part);
+      if (text) {
+        results.push(text);
+        if (isAlternative) break;
+      }
+    }
+    if (results.length > 0) return results.join('\n\n');
+  }
+
+  // Fallback: strip HTML if the body is HTML-encoded
+  if (data && payload.mimeType === 'text/html') {
+    try {
+      const decoded = Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString(
+        'utf-8',
+      );
+      return decoded
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/p>/gi, '\n')
+        .replace(/<[^>]+>/g, ' ')
+        .replace(/&nbsp;/gi, ' ')
+        .replace(/&amp;/gi, '&')
+        .replace(/&lt;/gi, '<')
+        .replace(/&gt;/gi, '>')
+        .replace(/\s{2,}/g, ' ')
+        .trim();
+    } catch {
+      return '';
+    }
+  }
+
+  return '';
+}
+
+export interface GmailMessagePart {
+  mimeType?: string | null;
+  body?: { data?: string | null };
+  parts?: GmailMessagePart[];
+}
+
+/**
  * Fetches full message details for a given message ID.
  */
 export async function fetchMessage(
@@ -132,8 +209,7 @@ export async function fetchMessage(
     gmail.users.messages.get({
       userId: 'me',
       id: messageId,
-      format: 'metadata',
-      metadataHeaders: ['From', 'Subject', 'Date'],
+      format: 'full',
     }),
   );
 
@@ -152,6 +228,7 @@ export async function fetchMessage(
   const receivedAt = dateHeader ? new Date(dateHeader) : new Date();
   const isUnread = message.labelIds?.includes('UNREAD') || false;
   const labels = message.labelIds || [];
+  const bodyText = extractBodyText(message.payload);
 
   return {
     messageId: message.id,
@@ -160,6 +237,7 @@ export async function fetchMessage(
     from,
     subject,
     snippet: message.snippet || '',
+    bodyText,
     receivedAt,
     isUnread,
     labels,
@@ -189,6 +267,7 @@ export async function storeMessage(
       from: message.from,
       subject: message.subject,
       snippet: message.snippet,
+      bodyText: message.bodyText,
       receivedAt: message.receivedAt,
       isUnread: message.isUnread,
       labels: message.labels,
@@ -196,6 +275,9 @@ export async function storeMessage(
     update: {
       isUnread: message.isUnread,
       labels: message.labels,
+      subject: message.subject,
+      snippet: message.snippet,
+      bodyText: message.bodyText,
     },
   });
 

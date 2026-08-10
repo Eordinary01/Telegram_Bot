@@ -40,6 +40,8 @@ _(One line per decision. Only log decisions that would be expensive to rediscove
 - [x] Pub/Sub push notifications made optional for development; manual sync endpoint provided for testing.
 - [x] BullMQ used for async job processing with Redis as message broker.
 - [x] Gmail watch registration automatic after OAuth, with 7-day expiry tracking.
+- [x] 100% Free Production Deployment Architecture selected: Vercel (Web CDN) + Neon.tech (Managed Postgres) + Upstash (Managed Redis) + Koyeb/OCI (API & Worker Docker containers).
+
 
 ---
 
@@ -54,6 +56,12 @@ _(One line per decision. Only log decisions that would be expensive to rediscove
 - [x] Phase 4 — Telegram delivery implemented. Telegraf bot linking flow, push notifications for high-priority emails, account linking endpoints. 56 tests pass.
 - [x] Phase 5 — Dashboard & real-time feed implemented. Server-Sent Events (SSE) `/emails/stream` endpoint, `/emails` list and `/emails/stats` endpoints, modern glassmorphism React/Vite web UI with priority filters, search bar, email card score breakdown drawer, manual sync trigger, and Telegram linking modal. 59 tests pass.
 - [x] Phase 6 — Hardening & Production Readiness completed. Gmail API rate-limiting with exponential backoff (`withRetry`), Pino logger redaction for sensitive keys/tokens, system metrics endpoint (`GET /health/metrics`), and BullMQ job retry configurations. 60 tests pass across 9 test suites.
+- [x] Phase 7 — Interactive Telegram Bot, Smart Deadline Extractor & Calendar Export completed. `/recent`, `/deadlines`, `/digest` commands, `mark_read` inline action buttons, regex deadline extraction parser, and pre-filled Google Calendar URL generator. 79 tests pass across 11 test suites.
+- [x] Phase 8 — Escalating Reminders, Smart Action Buttons & Action-Required Dashboard completed. Added `notifiedAt`, `acknowledgedAt`, `reminderCount`, `snoozedUntil` DB fields, 2-row Telegram smart buttons (`✅ Acknowledge`, `⏰ Snooze ▾`, `🔕 Dismiss`), BullMQ 30-min cron processor for 2h/4h/18h escalating nudges, `PATCH /emails/:id/acknowledge` and `GET /emails/action-required` endpoints, plus pulsing Action-Required dashboard tab & stat card.
+- [x] Phase 9 — Real JWT auth, User Custom Priority Rules & Deployment Readiness. Stateless JWT auth (`signAuthToken`/`verifyAuthToken`, `JWT_SECRET`/`JWT_EXPIRES_IN` config), `require-auth` middleware on `/emails`, `/sync`, `/telegram`, `/rules`, `/health/metrics` (token via `Authorization: Bearer` or `?token=` for SSE), `GET /auth/me` now scoped to token (removed insecure query-param/fallback identity). Custom rule CRUD: `GET/POST /rules`, `PATCH/DELETE /rules/:id` for keyword + sender rules with impact presets (high=30/medium=20/low=10), scoped to owning user only; engine unchanged (loaders already merge user+global). On-demand re-score: `POST /rules/re-scan` → new `EMAIL_RESCAN` BullMQ queue + `email-rescan` worker processor. Web UI: token storage in localStorage, `Authorization` header on all fetches, "🎯 My Rules" panel with add/delete + Re-scan button, Logout. Deployment: Dockerfiles for API/worker + nginx-served web, compose runs all services. 85 tests pass across 13 test suites.
+
+Phase 9 addendum — Auto re-scan on rule change. Rule mutations (create, patch, delete) now auto-enqueue `EMAIL_RESCAN` via a non-blocking `queueRescan` helper (swallows queue errors so the mutation never fails; response includes `rescan: { queued, jobId }`). The manual `POST /rules/re-scan` endpoint and "Re-scan" button remain. 88 tests pass across 13 test suites.
+
 
 ### In Progress
 

@@ -10,11 +10,7 @@ import {
   storeMessage,
   updateSyncState,
 } from '@jecrc/gmail';
-import {
-  scoreEmail,
-  loadSenderRules,
-  loadKeywordRules,
-} from '@jecrc/scoring';
+import { scoreEmail, loadSenderRules, loadKeywordRules, extractDeadline } from '@jecrc/scoring';
 import { pushScoredEmail } from '@jecrc/telegram';
 import type { SyncUserEmailsJob } from '@jecrc/queue';
 
@@ -57,6 +53,21 @@ export async function processEmailSync(
       throw new Error(`User ${userId} has no sync state - watch not registered`);
     }
 
+    // Check if user has added at least 3 custom rules before syncing emails
+    const [userKeywordsCount, userSendersCount] = await Promise.all([
+      prisma.keywordRule.count({ where: { userId } }),
+      prisma.senderRule.count({ where: { userId } }),
+    ]);
+
+    const userRulesCount = userKeywordsCount + userSendersCount;
+    if (userRulesCount < 3) {
+      logger.warn(
+        { userId, userRulesCount },
+        'User has fewer than 3 custom priority rules configured. Skipping email sync.',
+      );
+      return { synced: 0, scored: 0, filtered: 0 };
+    }
+
     // Get fresh access token
     const accessToken = await getAccessTokenForUser(prisma, config, userId);
 
@@ -69,7 +80,10 @@ export async function processEmailSync(
     try {
       messageIds = await fetchHistoryChanges(oauth2Client, user.syncState.lastHistoryId);
     } catch {
-      logger.warn({ userId }, 'History sync failed or expired, falling back to recent inbox messages');
+      logger.warn(
+        { userId },
+        'History sync failed or expired, falling back to recent inbox messages',
+      );
     }
 
     if (messageIds.length === 0) {
@@ -120,7 +134,10 @@ export async function processEmailSync(
           preloadedKeywordRules,
         );
 
-        // Step 3: Update the email record with scoring results
+        // Step 2.5: Extract deadline from subject + snippet + full body text
+        const deadline = extractDeadline(message.subject, message.snippet, message.bodyText);
+
+        // Step 3: Update the email record with scoring + deadline results
         await prisma.email.update({
           where: {
             userId_messageId: {
@@ -133,27 +150,26 @@ export async function processEmailSync(
             priorityScore: scoringResult.priorityScore,
             priorityLabel: scoringResult.priorityLabel,
             priorityReasons: scoringResult.priorityReasons,
+            deadlineAt: deadline.date,
+            deadlineText: deadline.deadlineText,
           },
         });
 
         scoredCount++;
 
         // Push Telegram notification for scored emails (High/Medium priority)
-        pushScoredEmail(
-          prisma,
-          config.TELEGRAM_BOT_TOKEN,
-          userId,
-          {
-            from: message.from,
-            subject: message.subject,
-            snippet: message.snippet,
-            messageId: message.messageId,
-            priorityScore: scoringResult.priorityScore,
-            priorityLabel: scoringResult.priorityLabel,
-            priorityReasons: scoringResult.priorityReasons,
-            receivedAt: message.receivedAt instanceof Date ? message.receivedAt : new Date(message.receivedAt),
-          },
-        ).catch((pushError) => {
+        pushScoredEmail(prisma, config.TELEGRAM_BOT_TOKEN, userId, {
+          from: message.from,
+          subject: message.subject,
+          snippet: message.snippet,
+          bodyText: message.bodyText,
+          messageId: message.messageId,
+          priorityScore: scoringResult.priorityScore,
+          priorityLabel: scoringResult.priorityLabel,
+          priorityReasons: scoringResult.priorityReasons,
+          receivedAt:
+            message.receivedAt instanceof Date ? message.receivedAt : new Date(message.receivedAt),
+        }).catch((pushError) => {
           // Non-blocking: don't fail the sync if Telegram push fails
           logger.error(
             { error: pushError, messageId: message.messageId, userId },
@@ -181,10 +197,7 @@ export async function processEmailSync(
     // Update sync state
     await updateSyncState(prisma, userId, latestHistoryId);
 
-    logger.info(
-      { userId, syncedCount, scoredCount, filteredCount },
-      'Email sync completed',
-    );
+    logger.info({ userId, syncedCount, scoredCount, filteredCount }, 'Email sync completed');
 
     return { synced: syncedCount, scored: scoredCount, filtered: filteredCount };
   } catch (error) {

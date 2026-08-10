@@ -1,6 +1,6 @@
 import type { PrismaClient } from '@jecrc/database';
 import { getLogger } from '@jecrc/observability';
-import { extractDeadline } from '@jecrc/scoring';
+import { extractDeadline, generateGoogleCalendarUrl } from '@jecrc/scoring';
 import { validateAndLink } from './linking.js';
 
 import type { Context } from 'telegraf';
@@ -41,9 +41,9 @@ export function configureBot(
     if (!code) {
       await ctx.reply(
         '👋 *Welcome to JECRC Mail Priority!*\n\n' +
-          'To link your Gmail account, please use the linking code from the JECRC Mail dashboard.\n\n' +
-          'Send: `/start YOUR_CODE`\n\n' +
-          '_Example: `/start ABC123XYZ`_',
+        'To link your Gmail account, please use the linking code from the JECRC Mail dashboard.\n\n' +
+        'Send: `/start YOUR_CODE`\n\n' +
+        '_Example: `/start ABC123XYZ`_',
         { parse_mode: 'Markdown' },
       );
       return;
@@ -57,8 +57,8 @@ export function configureBot(
       if (!result) {
         await ctx.reply(
           '❌ *Invalid or expired linking code.*\n\n' +
-            'Please generate a new code from the JECRC Mail dashboard and try again.\n\n' +
-            'Make sure to use the code within 15 minutes.',
+          'Please generate a new code from the JECRC Mail dashboard and try again.\n\n' +
+          'Make sure to use the code within 15 minutes.',
           { parse_mode: 'Markdown' },
         );
         return;
@@ -68,20 +68,19 @@ export function configureBot(
 
       await ctx.reply(
         `✅ *Telegram Linked Successfully!*\n\n` +
-          `Welcome, *${displayName}*!\n\n` +
-          `Your JECRC Mail account is now linked to Telegram.\n` +
-          `You'll receive real-time notifications for important emails.\n\n` +
-          `_Commands available: /recent, /deadlines, /digest, /help_`,
+        `Welcome, *${displayName}*!\n\n` +
+        `Your JECRC Mail account is now linked to Telegram.\n` +
+        `You'll receive real-time notifications for important emails.\n\n` +
+        `_Commands available: /recent, /deadlines, /digest, /help_`,
         { parse_mode: 'Markdown' },
       );
 
       logger.info({ chatId, userId: result.userId }, 'Telegram link completed via bot');
     } catch (error) {
       logger.error({ error, chatId }, 'Error processing linking code');
-      await ctx.reply(
-        '❌ *Something went wrong.*\n\nPlease try again or contact support.',
-        { parse_mode: 'Markdown' },
-      );
+      await ctx.reply('❌ *Something went wrong.*\n\nPlease try again or contact support.', {
+        parse_mode: 'Markdown',
+      });
     }
   });
 
@@ -89,12 +88,12 @@ export function configureBot(
   bot.command('help', async (ctx: Context) => {
     await ctx.reply(
       '🤖 *JECRC Mail Bot Commands*\n\n' +
-        '`/start <CODE>` — Link your Gmail account using a code from dashboard\n' +
-        '`/recent` — View your top 5 recent high-priority emails\n' +
-        '`/deadlines` — List upcoming exam & submission deadlines\n' +
-        '`/digest` — Get an instant summary digest of recent mail\n' +
-        '`/status` — Check your connection status\n' +
-        '`/help` — Show this help message\n',
+      '`/start <CODE>` — Link your Gmail account using a code from dashboard\n' +
+      '`/recent` — View your top 5 recent high-priority emails\n' +
+      '`/deadlines` — List upcoming exam & submission deadlines\n' +
+      '`/digest` — Get an instant summary digest of recent mail\n' +
+      '`/status` — Check your connection status\n' +
+      '`/help` — Show this help message\n',
       { parse_mode: 'Markdown' },
     );
   });
@@ -113,14 +112,14 @@ export function configureBot(
       if (link) {
         await ctx.reply(
           `✅ *Connected*\n\n📧 Email: \`${link.user.email}\`\n💬 Chat ID: \`${link.chatId}\`\n\n` +
-            `You're all set to receive email notifications!`,
+          `You're all set to receive email notifications!`,
           { parse_mode: 'Markdown' },
         );
       } else {
         await ctx.reply(
           '❌ *Not connected*\n\n' +
-            'Your Telegram is not linked to any JECRC Mail account.\n' +
-            'Please visit the JECRC Mail dashboard to get a linking code.',
+          'Your Telegram is not linked to any JECRC Mail account.\n' +
+          'Please visit the JECRC Mail dashboard to get a linking code.',
           { parse_mode: 'Markdown' },
         );
       }
@@ -141,7 +140,9 @@ export function configureBot(
       });
 
       if (!link) {
-        await ctx.reply('❌ Please link your account first using `/start <CODE>`.', { parse_mode: 'Markdown' });
+        await ctx.reply('❌ Please link your account first using `/start <CODE>`.', {
+          parse_mode: 'Markdown',
+        });
         return;
       }
 
@@ -158,7 +159,10 @@ export function configureBot(
 
       const lines = recentEmails.map((e, idx) => {
         const icon = e.priorityLabel === 'high' ? '🔴' : e.priorityLabel === 'medium' ? '🟡' : '⚪';
-        const dateStr = e.receivedAt.toLocaleDateString('en-IN', { month: 'short', day: 'numeric' });
+        const dateStr = e.receivedAt.toLocaleDateString('en-IN', {
+          month: 'short',
+          day: 'numeric',
+        });
         const fromName = e.from.split('<')[0] ?? e.from;
         return `${idx + 1}. ${icon} <b>${escapeHtml(e.subject)}</b>\n   👤 <i>${escapeHtml(fromName)}</i> • ${dateStr}`;
       });
@@ -173,8 +177,8 @@ export function configureBot(
     }
   });
 
-  // /deadlines command — list upcoming extracted deadlines
-  bot.command('deadlines', async (ctx: Context) => {
+  // /deadlines and /deadline command — list upcoming extracted deadlines
+  bot.command(['deadlines', 'deadline'], async (ctx: Context) => {
     const chatId = ctx.chat?.id;
     if (!chatId) return;
 
@@ -184,35 +188,66 @@ export function configureBot(
       });
 
       if (!link) {
-        await ctx.reply('❌ Please link your account first using `/start <CODE>`.', { parse_mode: 'Markdown' });
+        await ctx.reply('❌ Please link your account first using `/start <CODE>`.', {
+          parse_mode: 'Markdown',
+        });
         return;
       }
 
       const emails = await prisma.email.findMany({
         where: { userId: link.userId },
         orderBy: { receivedAt: 'desc' },
-        take: 30,
+        take: 50,
       });
 
       const deadlineList = emails
         .map((e) => {
-          const dl = extractDeadline(e.subject, e.snippet);
-          return dl.deadlineText ? { subject: e.subject, deadline: dl.deadlineText, calUrl: dl.googleCalendarUrl } : null;
+          // Prefer persisted deadline; fall back to on-the-fly extraction
+          // (which now also scans the full body text).
+          const dl = extractDeadline(e.subject, e.snippet, e.bodyText ?? null);
+          const deadlineText = e.deadlineText ?? dl.deadlineText;
+          const deadlineAt = e.deadlineAt ?? dl.date;
+          if (!deadlineText) return null;
+
+          const calUrl =
+            dl.googleCalendarUrl ??
+            (deadlineAt
+              ? generateGoogleCalendarUrl(e.subject, e.snippet ?? e.subject, deadlineAt)
+              : null);
+
+          return {
+            subject: e.subject,
+            deadline: deadlineText,
+            calUrl,
+            deadlineAt,
+          };
         })
         .filter((item): item is NonNullable<typeof item> => item !== null);
 
-      if (deadlineList.length === 0) {
+      const now = new Date();
+      const upcoming = deadlineList.filter((item) => !item.deadlineAt || item.deadlineAt > now);
+      const displayItems = upcoming.length > 0 ? upcoming.slice(0, 5) : deadlineList.slice(0, 5);
+
+      if (displayItems.length === 0) {
         await ctx.reply('🎉 No upcoming deadlines detected in your recent emails!');
         return;
       }
 
-      const lines = deadlineList.slice(0, 5).map((item, idx) => {
+      const lines = displayItems.map((item, idx) => {
         const calLink = item.calUrl ? ` • <a href="${item.calUrl}">[Add to Cal]</a>` : '';
-        return `${idx + 1}. ⏰ <b>${escapeHtml(item.subject)}</b>\n   🗓️ <u>${escapeHtml(item.deadline)}</u>${calLink}`;
+        const isPast = item.deadlineAt && item.deadlineAt <= now;
+        const statusIcon = isPast ? '⌛' : '⏰';
+        const pastTag = isPast ? ' (Passed)' : '';
+        return `${idx + 1}. ${statusIcon} <b>${escapeHtml(item.subject)}</b>\n   🗓️ <u>${escapeHtml(item.deadline)}</u>${pastTag}${calLink}`;
       });
 
+      const headerText =
+        upcoming.length > 0
+          ? '⏰ <b>Upcoming Extracted Deadlines:</b>'
+          : '📋 <b>Extracted Email Deadlines:</b>';
+
       await ctx.reply(
-        `⏰ <b>Upcoming Extracted Deadlines:</b>\n━━━━━━━━━━━━━━━━━━━━━━\n${lines.join('\n\n')}`,
+        `${headerText}\n━━━━━━━━━━━━━━━━━━━━━━\n${lines.join('\n\n')}`,
         { parse_mode: 'HTML', link_preview_options: { is_disabled: true } },
       );
     } catch (error) {
@@ -232,7 +267,9 @@ export function configureBot(
       });
 
       if (!link) {
-        await ctx.reply('❌ Please link your account first using `/start <CODE>`.', { parse_mode: 'Markdown' });
+        await ctx.reply('❌ Please link your account first using `/start <CODE>`.', {
+          parse_mode: 'Markdown',
+        });
         return;
       }
 
@@ -254,7 +291,9 @@ export function configureBot(
         `📫 <b>Unread Emails:</b> ${unreadCount}`,
         `🔴 <b>High Priority Items:</b> ${highPriority.length}`,
         ``,
-        lines.length > 0 ? `<b>Top Urgent Notices:</b>\n${lines.join('\n')}` : `<i>No high priority alerts currently.</i>`,
+        lines.length > 0
+          ? `<b>Top Urgent Notices:</b>\n${lines.join('\n')}`
+          : `<i>No high priority alerts currently.</i>`,
         ``,
         `💡 <i>Tip: Use /recent or /deadlines for detailed lists.</i>`,
       ].join('\n');
@@ -285,10 +324,11 @@ export function configureBot(
         await ctx.answerCbQuery('✅ Email acknowledged!');
         if (ctx.callbackQuery.message?.text) {
           const originalText = ctx.callbackQuery.message.text;
-          await ctx.editMessageText(
-            `${originalText}\n\n✅ <i>Acknowledged — no more reminders</i>`,
-            { parse_mode: 'HTML' },
-          ).catch(() => {});
+          await ctx
+            .editMessageText(`${originalText}\n\n✅ <i>Acknowledged — no more reminders</i>`, {
+              parse_mode: 'HTML',
+            })
+            .catch(() => { });
         }
       } catch (error) {
         logger.error({ error, messageId }, 'Error acknowledging email');
@@ -357,10 +397,12 @@ export function configureBot(
 
         // Update the snooze menu message
         if (ctx.callbackQuery.message) {
-          await ctx.editMessageText(
-            `⏰ <b>Snoozed</b>\n\nReminders paused until <b>${displayLabel}</b>.`,
-            { parse_mode: 'HTML' },
-          ).catch(() => {});
+          await ctx
+            .editMessageText(
+              `⏰ <b>Snoozed</b>\n\nReminders paused until <b>${displayLabel}</b>.`,
+              { parse_mode: 'HTML' },
+            )
+            .catch(() => { });
         }
       } catch (error) {
         logger.error({ error, messageId }, 'Error snoozing email');
@@ -380,10 +422,12 @@ export function configureBot(
         await ctx.answerCbQuery('🚫 Marked as Not Interested');
         if (ctx.callbackQuery.message?.text) {
           const originalText = ctx.callbackQuery.message.text;
-          await ctx.editMessageText(
-            `${originalText}\n\n🚫 <i>Marked as Not Interested — reminders turned off</i>`,
-            { parse_mode: 'HTML' },
-          ).catch(() => {});
+          await ctx
+            .editMessageText(
+              `${originalText}\n\n🚫 <i>Marked as Not Interested — reminders turned off</i>`,
+              { parse_mode: 'HTML' },
+            )
+            .catch(() => { });
         }
       } catch (error) {
         logger.error({ error, messageId }, 'Error marking email as not interested');
@@ -391,7 +435,6 @@ export function configureBot(
       }
       return;
     }
-
 
     // 👁️ Mark as Read (legacy backward compatibility)
     if (data.startsWith('mark_read:')) {
@@ -408,9 +451,11 @@ export function configureBot(
         // Update inline text if text message
         if (ctx.callbackQuery.message?.text) {
           const originalText = ctx.callbackQuery.message.text;
-          await ctx.editMessageText(`${originalText}\n\n✅ <i>Marked as read</i>`, {
-            parse_mode: 'HTML',
-          }).catch(() => {}); // Ignore edit errors if message too old
+          await ctx
+            .editMessageText(`${originalText}\n\n✅ <i>Marked as read</i>`, {
+              parse_mode: 'HTML',
+            })
+            .catch(() => { }); // Ignore edit errors if message too old
         }
       } catch (error) {
         logger.error({ error, messageId }, 'Error marking email as read via callback');
@@ -435,10 +480,7 @@ export function configureBot(
 }
 
 function escapeHtml(str: string): string {
-  return str
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;');
+  return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 /**
