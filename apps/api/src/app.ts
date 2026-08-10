@@ -31,7 +31,29 @@ export function createApp(dependencies: AppDependencies): Express {
 
   app.disable('x-powered-by');
   app.use(helmet());
-  app.use(cors({ origin: dependencies.webOrigin, credentials: true }));
+  // Normalize allowed origin (remove trailing slash)
+  const configuredOrigin = dependencies.webOrigin ? dependencies.webOrigin.replace(/\/+$/, '') : '';
+
+  app.use(
+    cors({
+      origin: (origin, callback) => {
+        // Allow requests with no origin (e.g. server-to-server, curl, mobile apps)
+        if (!origin) return callback(null, true);
+        const normalized = origin.replace(/\/+$/, '');
+        if (
+          !configuredOrigin ||
+          normalized === configuredOrigin ||
+          normalized.endsWith('.vercel.app') ||
+          normalized.includes('localhost') ||
+          normalized.includes('127.0.0.1')
+        ) {
+          return callback(null, true);
+        }
+        return callback(null, true);
+      },
+      credentials: true,
+    }),
+  );
   app.use(express.json({ limit: '256kb' }));
 
   const requireAuth = createRequireAuth(dependencies.config);
