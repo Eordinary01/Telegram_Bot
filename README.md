@@ -1,30 +1,42 @@
 # JECRC Mail Priority Sync System
 
-A multi-tenant Gmail priority service for the JECRC University pilot. The project is being implemented in the strict phases defined in `ANTIGRAVITY_PROMPT.md`.
+Real-time Gmail priority filtering for JECRC University students. Syncs inboxes, filters to
+`jecrcu.edu.in` senders, scores emails with a deterministic rule engine, and pushes
+high-priority placement, exam, and faculty notices straight to Telegram and a live dashboard.
 
-## Phase 0 scope
+## Features
 
-The current scaffold provides:
+- Google OAuth2 login with `gmail.readonly` scope only
+- Real-time sync via Gmail Pub/Sub push notifications (with manual sync fallback)
+- Sender gate: exact `jecrcu.edu.in` domain matching, config driven
+- Deterministic priority scoring engine with deadline extraction (no LLM, fast and auditable)
+- Telegram bot: account linking, recent emails, deadlines, daily digest, mark-as-read
+- Live dashboard with SSE updates, rules panel, and theme picker
+- Multi-tenant by design: every user data table has a `user_id` foreign key
+- Refresh tokens encrypted at rest with AES-256-GCM, never logged
 
-- Express API with liveness and dependency-readiness endpoints
-- Separate worker process
-- React/Vite dashboard shell
-- Validated environment configuration
-- Prisma/PostgreSQL and Redis connectivity helpers
-- Docker Compose services for local PostgreSQL and Redis
-- TypeScript, ESLint, Prettier, and Vitest tooling
+## Architecture
 
-No Gmail, OAuth, scoring, or Telegram business logic is included in Phase 0.
+| Layer | Tech |
+|---|---|
+| API | Node.js, Express, Helmet, CORS |
+| Web | React, Vite, TypeScript, SSE |
+| Worker | BullMQ jobs on Redis |
+| Database | PostgreSQL 17, Prisma ORM |
+| Gmail | Google OAuth2, Pub/Sub push, History API |
+| Telegram | Telegraf bot |
+| Infra | Docker Compose, pnpm workspaces |
 
-## Prerequisites
+## Repository structure
 
-- Node.js 22 or newer
-- Corepack
-- Docker Desktop with Docker Compose
+apps/api, apps/web, apps/worker, packages/auth, packages/config, packages/database,
+packages/gmail, packages/observability, packages/queue, packages/scoring, packages/shared,
+packages/telegram
 
-## Local setup
+## Getting started
 
-```bash
+Requires Node.js 22+, Corepack, Docker Desktop.
+
 corepack enable
 corepack prepare pnpm@10.13.1 --activate
 pnpm install
@@ -32,30 +44,31 @@ cp .env.example .env
 pnpm infra:up
 pnpm prisma:generate
 pnpm check:connections
-```
 
-Start services in separate terminals:
+Start the API, worker, and web dev servers (separate terminals):
 
-```bash
 pnpm dev:api
 pnpm dev:worker
 pnpm dev:web
-```
 
-Endpoints:
+- API liveness: http://localhost:3000/health/live
+- API readiness: http://localhost:3000/health/ready
+- Dashboard: http://localhost:5173
 
-- API liveness: `http://localhost:3000/health/live`
-- API readiness: `http://localhost:3000/health/ready`
-- Dashboard: `http://localhost:5173`
+## Telegram bot
 
-## Quality checks
+After linking your Gmail from the dashboard, start the bot and send /start <CODE>.
+Commands: /start, /help, /status, /recent, /deadlines, /digest
 
-```bash
-pnpm format:check
-pnpm lint
-pnpm typecheck
-pnpm test
-pnpm build
-```
+## Scripts
 
-See `docs/local-development.md` for troubleshooting and `docs/verification/phase-0.md` for the Phase 0 acceptance procedure.
+build, dev, lint, typecheck, test, format, infra:up, infra:down, prisma:generate
+
+## Docs
+
+docs/local-development.md, docs/oauth-setup.md, docs/google-cloud-setup.md,
+docs/verification/phase-0.md, docs/verification/phase-1.md
+
+## License
+
+Private. Built for the JECRC University pilot.
