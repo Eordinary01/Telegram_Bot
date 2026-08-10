@@ -4,7 +4,7 @@
 
 export interface SyncUserEmailsJob {
   userId: string;
-  triggerSource: 'webhook' | 'manual' | 'renewal';
+  triggerSource: 'webhook' | 'manual' | 'renewal' | 'cron';
 }
 
 export interface ProcessEmailJob {

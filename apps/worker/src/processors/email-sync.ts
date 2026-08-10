@@ -53,22 +53,22 @@ export async function processEmailSync(
     if (!syncState) {
       syncState = await prisma.syncState.upsert({
         where: { userId },
-        create: { userId, lastHistoryId: '0' },
+        create: { userId, lastHistoryId: '0', lastSyncAt: new Date() },
         update: {},
       });
     }
 
-    // Check if user has added at least 3 custom rules before syncing emails
-    const [userKeywordsCount, userSendersCount] = await Promise.all([
-      prisma.keywordRule.count({ where: { userId } }),
-      prisma.senderRule.count({ where: { userId } }),
+    // Check if system default rules or user custom rules are available
+    const [keywordsCount, sendersCount] = await Promise.all([
+      prisma.keywordRule.count({ where: { isActive: true, OR: [{ userId: null }, { userId }] } }),
+      prisma.senderRule.count({ where: { isActive: true, OR: [{ userId: null }, { userId }] } }),
     ]);
 
-    const userRulesCount = userKeywordsCount + userSendersCount;
-    if (userRulesCount < 3) {
+    const totalRulesCount = keywordsCount + sendersCount;
+    if (totalRulesCount < 1) {
       logger.warn(
-        { userId, userRulesCount },
-        'User has fewer than 3 custom priority rules configured. Skipping email sync.',
+        { userId, totalRulesCount },
+        'No priority rules configured. Skipping email sync.',
       );
       return { synced: 0, scored: 0, filtered: 0 };
     }
