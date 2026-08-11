@@ -88,6 +88,13 @@ const reminderQueue = new Queue<ReminderCheckJob>(QueueNames.REMINDER_CHECK, {
   connection: redisConnection,
 });
 
+// Remove any stale repeatable jobs from previous deploys (e.g. old 1-min cron)
+const existingJobs = await reminderQueue.getJobSchedulers();
+for (const scheduler of existingJobs) {
+  await reminderQueue.removeJobScheduler(scheduler.key);
+  logger.info({ key: scheduler.key }, 'Removed stale reminder scheduler');
+}
+
 await reminderQueue.add(
   'reminder-cron',
   { triggeredBy: 'cron' },
