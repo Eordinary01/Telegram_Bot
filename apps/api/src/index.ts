@@ -70,14 +70,19 @@ async function startTelegramBot(): Promise<void> {
 void startTelegramBot();
 
 // --- Embedded Worker Setup (allows running API + Worker in 1 Free Web Service) ---
+// Lazy-load worker after API server starts accepting connections
 if (process.env['ENABLE_EMBEDDED_WORKER'] !== 'false') {
-  try {
-    logger.info('Initializing embedded BullMQ queue worker...');
-    await import('../../worker/src/index.js');
-  } catch (workerErr) {
-    const errDetails = workerErr instanceof Error ? { message: workerErr.message, stack: workerErr.stack } : { err: String(workerErr) };
-    logger.warn({ error: errDetails }, 'Failed to initialize embedded worker');
-  }
+  server.on('listening', () => {
+    void (async () => {
+      try {
+        logger.info('Initializing embedded BullMQ queue worker...');
+        await import('../../worker/src/index.js');
+      } catch (workerErr) {
+        const errDetails = workerErr instanceof Error ? { message: workerErr.message, stack: workerErr.stack } : { err: String(workerErr) };
+        logger.warn({ error: errDetails }, 'Failed to initialize embedded worker');
+      }
+    })();
+  });
 }
 
 

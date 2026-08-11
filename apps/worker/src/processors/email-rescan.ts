@@ -14,10 +14,26 @@ import type { RescanEmailsJob } from '@jecrc/queue';
 
 const logger = getLogger('email-rescan-processor');
 
+const BATCH_SIZE = 10;
+
 interface RescanResult {
   total: number;
   scored: number;
   updated: number;
+}
+
+/**
+ * Process items in batches with a concurrency limit.
+ */
+async function processBatch<T>(
+  items: T[],
+  batchSize: number,
+  fn: (item: T) => Promise<void>,
+): Promise<void> {
+  for (let i = 0; i < items.length; i += batchSize) {
+    const batch = items.slice(i, i + batchSize);
+    await Promise.all(batch.map(fn));
+  }
 }
 
 /**
@@ -59,34 +75,37 @@ export async function processEmailRescan(
   ]);
 
   // Backfill full body text for emails stored before body extraction existed
-  let accessToken: string | null = null;
-  let oauth2Client: ReturnType<typeof createOAuth2Client> | null = null;
-  for (const email of emails) {
-    if (email.bodyText) continue;
-
-    if (!oauth2Client) {
-      try {
-        accessToken = await getAccessTokenForUser(prisma, config, userId);
-        oauth2Client = createOAuth2Client(config);
-        oauth2Client.setCredentials({ access_token: accessToken });
-      } catch (error) {
-        logger.error({ error, userId }, 'Failed to get Gmail access token for body backfill');
-        break;
-      }
+  const emailsNeedingBody = emails.filter((e) => !e.bodyText);
+  if (emailsNeedingBody.length > 0) {
+    let accessToken: string | null = null;
+    let oauth2Client: ReturnType<typeof createOAuth2Client> | null = null;
+    try {
+      accessToken = await getAccessTokenForUser(prisma, config, userId);
+      oauth2Client = createOAuth2Client(config);
+      oauth2Client.setCredentials({ access_token: accessToken });
+    } catch (error) {
+      logger.error({ error, userId }, 'Failed to get Gmail access token for body backfill');
     }
 
-    try {
-      const message = await fetchMessage(oauth2Client, email.messageId);
-      await storeMessage(prisma, userId, message);
-      email.bodyText = message.bodyText;
-    } catch (error) {
-      logger.error({ error, emailId: email.id, userId }, 'Failed to backfill email body');
+    if (oauth2Client) {
+      let backfilled = 0;
+      await processBatch(emailsNeedingBody, BATCH_SIZE, async (email) => {
+        try {
+          const message = await fetchMessage(oauth2Client, email.messageId);
+          await storeMessage(prisma, userId, message);
+          email.bodyText = message.bodyText;
+          backfilled++;
+        } catch (error) {
+          logger.error({ error, emailId: email.id, userId }, 'Failed to backfill email body');
+        }
+      });
+      logger.info({ userId, backfilled, total: emailsNeedingBody.length }, 'Body backfill completed');
     }
   }
 
   let updated = 0;
 
-  for (const email of emails) {
+  await processBatch(emails, BATCH_SIZE, async (email) => {
     try {
       const deadline = extractDeadline(email.subject, email.snippet, email.bodyText ?? null);
 
@@ -129,9 +148,8 @@ export async function processEmailRescan(
       }
     } catch (error) {
       logger.error({ error, emailId: email.id, userId }, 'Failed to re-score email');
-      continue;
     }
-  }
+  });
 
   logger.info({ userId, total: emails.length, updated }, 'Email re-score completed');
 

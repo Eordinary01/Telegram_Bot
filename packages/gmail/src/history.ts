@@ -128,12 +128,17 @@ export async function fetchRecentMessages(
   }
 }
 
+const MAX_MIME_DEPTH = 10;
+
 /**
  * Recursively extracts plain-text content from a Gmail message payload.
  * Prefers text/plain over text/html; falls back to stripping HTML tags.
  */
-export function extractBodyText(payload: GmailMessagePart | undefined): string {
-  if (!payload) return '';
+export function extractBodyText(
+  payload: GmailMessagePart | undefined,
+  depth = 0,
+): string {
+  if (!payload || depth > MAX_MIME_DEPTH) return '';
 
   const data = payload.body?.data;
   if (data && payload.mimeType === 'text/plain') {
@@ -157,7 +162,7 @@ export function extractBodyText(payload: GmailMessagePart | undefined): string {
 
     const results: string[] = [];
     for (const part of candidates) {
-      const text = extractBodyText(part);
+      const text = extractBodyText(part, depth + 1);
       if (text) {
         results.push(text);
         if (isAlternative) break;

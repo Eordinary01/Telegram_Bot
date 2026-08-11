@@ -8,6 +8,27 @@ import { eventBroadcaster, type EmailEvent } from '../events.js';
 
 const logger = getLogger('emails-routes');
 
+// Simple in-memory cache for stats responses
+interface CacheEntry {
+  data: Record<string, unknown>;
+  expiry: number;
+}
+const statsCache = new Map<string, CacheEntry>();
+const STATS_CACHE_TTL_MS = 30_000; // 30 seconds
+
+function getCachedStats(userId: string): Record<string, unknown> | null {
+  const entry = statsCache.get(userId);
+  if (entry && Date.now() < entry.expiry) {
+    return entry.data;
+  }
+  statsCache.delete(userId);
+  return null;
+}
+
+function setCachedStats(userId: string, data: Record<string, unknown>): void {
+  statsCache.set(userId, { data, expiry: Date.now() + STATS_CACHE_TTL_MS });
+}
+
 interface EmailsDependencies {
   prisma: PrismaClient;
   config: AppConfig;
@@ -106,6 +127,12 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
         return res.status(401).json({ error: 'Not authenticated' });
       }
 
+      // Return cached response if available
+      const cached = getCachedStats(userId);
+      if (cached) {
+        return res.status(200).json(cached);
+      }
+
       const [total, high, medium, low, unread, actionRequired, syncState] = await Promise.all([
         prisma.email.count({ where: { userId } }),
         prisma.email.count({ where: { userId, priorityLabel: 'HIGH' } }),
@@ -123,7 +150,7 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
         prisma.syncState.findUnique({ where: { userId } }),
       ]);
 
-      return res.status(200).json({
+      const response = {
         total,
         high,
         medium,
@@ -131,7 +158,11 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
         unread,
         actionRequired,
         lastSyncAt: syncState?.lastSyncAt?.toISOString() ?? null,
-      });
+      };
+
+      setCachedStats(userId, response);
+
+      return res.status(200).json(response);
     } catch (error) {
       logger.error({ error }, 'Failed to fetch email stats');
       return res.status(500).json({ error: 'Failed to fetch email stats' });
@@ -276,6 +307,8 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
         'Test dummy email injected successfully',
       );
 
+      statsCache.delete(userId);
+
       return res.status(201).json({
         message: 'Test email injected successfully',
         email: savedEmail,
@@ -323,6 +356,8 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
 
       logger.info({ userId, count: result.count, all: all === 'true' }, 'Cleared emails');
 
+      statsCache.delete(userId);
+
       return res.status(200).json({
         message: `Cleared ${result.count} email(s)`,
         count: result.count,
@@ -359,6 +394,8 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
         return res.status(404).json({ error: 'Email not found' });
       }
 
+      statsCache.delete(userId);
+
       const updated = await prisma.email.findUnique({ where: { id } });
 
       return res.status(200).json({ message: 'Email marked as read', email: updated });
@@ -393,6 +430,8 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
       if (email.count === 0) {
         return res.status(404).json({ error: 'Email not found' });
       }
+
+      statsCache.delete(userId);
 
       const updated = await prisma.email.findUnique({ where: { id } });
 
