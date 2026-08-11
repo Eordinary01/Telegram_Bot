@@ -69,6 +69,11 @@ async function startTelegramBot(): Promise<void> {
 // Start the bot (non-blocking)
 void startTelegramBot();
 
+// --- Express Server ---
+const server = app.listen(config.API_PORT, config.API_HOST, () => {
+  logger.info({ host: config.API_HOST, port: config.API_PORT }, 'API server is listening');
+});
+
 // --- Embedded Worker Setup (allows running API + Worker in 1 Free Web Service) ---
 // Lazy-load worker after API server starts accepting connections
 if (process.env['ENABLE_EMBEDDED_WORKER'] !== 'false') {
@@ -84,14 +89,6 @@ if (process.env['ENABLE_EMBEDDED_WORKER'] !== 'false') {
     })();
   });
 }
-
-
-// --- Express Server ---
-
-
-const server = app.listen(config.API_PORT, config.API_HOST, () => {
-  logger.info({ host: config.API_HOST, port: config.API_PORT }, 'API server is listening');
-});
 
 // --- Self-Keep-Alive pinger (prevents Render free-tier spin-down) ---
 const publicUrl =
