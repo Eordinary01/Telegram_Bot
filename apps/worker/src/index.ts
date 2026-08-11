@@ -24,18 +24,21 @@ logger.info('Worker dependencies are ready');
 const redisConnection = parseRedisConnection(config.REDIS_URL);
 
 
+// Shared worker options — blockingConnection uses BRPOPLPUSH instead of polling,
+// cutting idle Redis commands from ~1.5M/month to near zero.
+const workerOpts = {
+  connection: redisConnection,
+  blockingConnection: true,
+  stalledInterval: 120_000, // Check stalled every 2 min (was 60s)
+};
+
 // Create BullMQ worker for email sync
 const emailSyncWorker = new Worker<SyncUserEmailsJob>(
   QueueNames.EMAIL_SYNC,
   async (job) => {
     return processEmailSync(job, prisma, config);
   },
-  {
-    connection: redisConnection,
-    concurrency: 5, // Process up to 5 jobs concurrently
-    drainDelay: 15, // Wait 15s when queue is empty to reduce Redis command usage
-    stalledInterval: 60000, // Check for stalled jobs every 60s
-  },
+  { ...workerOpts, concurrency: 5 },
 );
 
 emailSyncWorker.on('completed', (job) => {
@@ -52,12 +55,7 @@ const reminderCheckWorker = new Worker<ReminderCheckJob>(
   async (job) => {
     return processReminderCheck(job, prisma, config);
   },
-  {
-    connection: redisConnection,
-    concurrency: 1, // Only one reminder check at a time
-    drainDelay: 15,
-    stalledInterval: 60000,
-  },
+  { ...workerOpts, concurrency: 1 },
 );
 
 reminderCheckWorker.on('completed', (job) => {
@@ -74,12 +72,7 @@ const emailRescanWorker = new Worker<RescanEmailsJob>(
   async (job) => {
     return processEmailRescan(job, prisma, config);
   },
-  {
-    connection: redisConnection,
-    concurrency: 2,
-    drainDelay: 15,
-    stalledInterval: 60000,
-  },
+  { ...workerOpts, concurrency: 2 },
 );
 
 emailRescanWorker.on('completed', (job) => {
@@ -90,7 +83,7 @@ emailRescanWorker.on('failed', (job, err) => {
   logger.error({ jobId: job?.id, error: err }, 'Email rescan failed');
 });
 
-// Set up repeatable cron for reminder checks (every 1 minute for testing)
+// Set up repeatable cron for reminder checks (every 30 minutes — production interval)
 const reminderQueue = new Queue<ReminderCheckJob>(QueueNames.REMINDER_CHECK, {
   connection: redisConnection,
 });
@@ -99,12 +92,12 @@ await reminderQueue.add(
   'reminder-cron',
   { triggeredBy: 'cron' },
   {
-    repeat: { pattern: '* * * * *' }, // Every 1 minute for testing
+    repeat: { pattern: '*/30 * * * *' }, // Every 30 minutes (production)
     removeOnComplete: { count: 10 },
     removeOnFail: { count: 20 },
   },
 );
-logger.info('Reminder check cron scheduled (every 1 minute for testing)');
+logger.info('Reminder check cron scheduled (every 30 minutes)');
 
 // Queue instance to enqueue periodic auto email sync jobs
 const emailSyncQueue = new Queue<SyncUserEmailsJob>(QueueNames.EMAIL_SYNC, {
