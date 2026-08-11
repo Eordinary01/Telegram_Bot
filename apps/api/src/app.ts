@@ -49,7 +49,7 @@ export function createApp(dependencies: AppDependencies): Express {
         ) {
           return callback(null, true);
         }
-        return callback(null, true);
+        return callback(new Error('Not allowed by CORS'));
       },
       credentials: true,
     }),
@@ -99,7 +99,7 @@ export function createApp(dependencies: AppDependencies): Express {
   );
 
   // Webhook routes (for Pub/Sub push notifications - unauthenticated, validated by secret in Gmail webhook handler)
-  app.use('/webhooks', createWebhookRouter({ emailSyncQueue: dependencies.emailSyncQueue }));
+  app.use('/webhooks', createWebhookRouter({ prisma: dependencies.prisma, emailSyncQueue: dependencies.emailSyncQueue }));
 
   // Telegram routes (linking flow for dashboard - auth-protected)
   app.use(

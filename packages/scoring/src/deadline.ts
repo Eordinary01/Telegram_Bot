@@ -40,6 +40,64 @@ const WEEKDAYS =
 const MONTH_NAMES =
   /(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)/i;
 
+// Pre-compiled deadline regexes (avoid recompilation per call)
+const DEADLINE_REGEX = new RegExp(
+  [
+    '(?:deadline|last date|due date|due|submit by|submission date|submission|on or before|before|by)',
+    '(?:\\s*(?:for|of|to|is|on|by|at|set|until|till|:|-)*[a-z0-9_ -]{0,30}?\\b)?',
+    '\\s*',
+    '(?:',
+    WEEKDAYS.source,
+    '(?:,\\s*|\\s+)?',
+    ')?',
+    '(',
+    // 30th July / 30 July 2026
+    '[0-9]{1,2}(?:st|nd|rd|th)?\\s+',
+    MONTH_NAMES.source,
+    '(?:\\s*,?\\s+[0-9]{4})?',
+    '|',
+    // August 19, 2026 / Aug 19 2026 (month-first)
+    MONTH_NAMES.source,
+    '\\s+[0-9]{1,2}(?:st|nd|rd|th)?',
+    '(?:\\s*,?\\s+[0-9]{4})?',
+    '|',
+    // YYYY-MM-DD or YYYY/MM/DD
+    '[0-9]{4}[/-][0-9]{1,2}[/-][0-9]{1,2}',
+    '|',
+    // 15/08/2026 or 15-08-2026
+    '[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4}',
+    '|',
+    '\\btomorrow\\b|\\btoday\\b',
+    ')',
+    '(?:\\s+(?:by|at)?\\s*([0-9]{1,2}(?::[0-9]{2})?\\s*(?:am|pm|a\\.m\\.|p\\.m\\.)?))?',
+  ].join(''),
+  'i',
+);
+
+const FALLBACK_DATE_REGEX = new RegExp(
+  [
+    '(?:',
+    WEEKDAYS.source,
+    '(?:,\\s*|\\s+)?',
+    ')?',
+    '(',
+    '[0-9]{1,2}(?:st|nd|rd|th)?\\s+',
+    MONTH_NAMES.source,
+    '(?:\\s*,?\\s+[0-9]{4})?',
+    '|',
+    MONTH_NAMES.source,
+    '\\s+[0-9]{1,2}(?:st|nd|rd|th)?',
+    '(?:\\s*,?\\s+[0-9]{4})?',
+    '|',
+    '[0-9]{4}[/-][0-9]{1,2}[/-][0-9]{1,2}',
+    '|',
+    '[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4}',
+    ')',
+    '(?:\\s+(?:by|at)?\\s*([0-9]{1,2}(?::[0-9]{2})?\\s*(?:am|pm|a\\.m\\.|p\\.m\\.)?))?',
+  ].join(''),
+  'i',
+);
+
 /**
  * Extracts a deadline date and text from email subject, snippet & body,
  * and generates a Google Calendar template URL if a valid date is found.
@@ -51,41 +109,7 @@ export function extractDeadline(
 ): ExtractedDeadline {
   const text = `${subject} ${snippet ?? ''} ${bodyText ?? ''}`;
 
-  // Primary Regex: Trigger phrase followed by optional connector & filler words (up to ~30 chars), optional weekday, then date.
-  const deadlineRegex = new RegExp(
-    [
-      '(?:deadline|last date|due date|due|submit by|submission date|submission|on or before|before|by)',
-      '(?:\\s*(?:for|of|to|is|on|by|at|set|until|till|:|-)*[a-z0-9_ -]{0,30}?\\b)?',
-      '\\s*',
-      '(?:',
-      WEEKDAYS.source,
-      '(?:,\\s*|\\s+)?',
-      ')?',
-      '(',
-      // 30th July / 30 July 2026
-      '[0-9]{1,2}(?:st|nd|rd|th)?\\s+',
-      MONTH_NAMES.source,
-      '(?:\\s*,?\\s+[0-9]{4})?',
-      '|',
-      // August 19, 2026 / Aug 19 2026 (month-first)
-      MONTH_NAMES.source,
-      '\\s+[0-9]{1,2}(?:st|nd|rd|th)?',
-      '(?:\\s*,?\\s+[0-9]{4})?',
-      '|',
-      // YYYY-MM-DD or YYYY/MM/DD
-      '[0-9]{4}[/-][0-9]{1,2}[/-][0-9]{1,2}',
-      '|',
-      // 15/08/2026 or 15-08-2026
-      '[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4}',
-      '|',
-      '\\btomorrow\\b|\\btoday\\b',
-      ')',
-      '(?:\\s+(?:by|at)?\\s*([0-9]{1,2}(?::[0-9]{2})?\\s*(?:am|pm|a\\.m\\.|p\\.m\\.)?))?',
-    ].join(''),
-    'i',
-  );
-
-  let match = text.match(deadlineRegex);
+  const match = text.match(DEADLINE_REGEX);
   let rawDateStr = match ? match[1] ?? '' : '';
   let rawTimeStr = match ? match[2] : undefined;
   let fullMatchedText = match ? (match[0] ?? '').trim() : '';
@@ -97,31 +121,7 @@ export function extractDeadline(
       text,
     );
     if (hasKeyword) {
-      const standaloneDateRegex = new RegExp(
-        [
-          '(?:',
-          WEEKDAYS.source,
-          '(?:,\\s*|\\s+)?',
-          ')?',
-          '(',
-          '[0-9]{1,2}(?:st|nd|rd|th)?\\s+',
-          MONTH_NAMES.source,
-          '(?:\\s*,?\\s+[0-9]{4})?',
-          '|',
-          MONTH_NAMES.source,
-          '\\s+[0-9]{1,2}(?:st|nd|rd|th)?',
-          '(?:\\s*,?\\s+[0-9]{4})?',
-          '|',
-          '[0-9]{4}[/-][0-9]{1,2}[/-][0-9]{1,2}',
-          '|',
-          '[0-9]{1,2}[/-][0-9]{1,2}[/-][0-9]{2,4}',
-          ')',
-          '(?:\\s+(?:by|at)?\\s*([0-9]{1,2}(?::[0-9]{2})?\\s*(?:am|pm|a\\.m\\.|p\\.m\\.)?))?',
-        ].join(''),
-        'i',
-      );
-
-      const fallbackMatch = text.match(standaloneDateRegex);
+      const fallbackMatch = text.match(FALLBACK_DATE_REGEX);
       if (fallbackMatch && fallbackMatch[1]) {
         rawDateStr = fallbackMatch[1];
         rawTimeStr = fallbackMatch[2];

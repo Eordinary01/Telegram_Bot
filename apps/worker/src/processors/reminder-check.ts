@@ -58,11 +58,6 @@ export async function processReminderCheck(
         reminderCount: { lt: MAX_REMINDERS },
         priorityLabel: { in: ['HIGH', 'high', 'MEDIUM', 'medium'] },
       },
-      include: {
-        user: {
-          select: { id: true },
-        },
-      },
       orderBy: { receivedAt: 'desc' },
     });
 

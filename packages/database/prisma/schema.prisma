@@ -101,6 +101,7 @@ model Email {
   @@index([userId, isUnread])
   @@index([userId, priorityScore])
   @@index([userId, deadlineAt])
+  @@index([notifiedAt, acknowledgedAt, reminderCount, priorityLabel])
   @@map("emails")
 }
 

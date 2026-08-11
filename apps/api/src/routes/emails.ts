@@ -189,6 +189,11 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
     // Send initial ping event
     res.write(`data: ${JSON.stringify({ type: 'connected', userId })}\n\n`);
 
+    // Heartbeat to detect dead connections and prevent memory leaks
+    const heartbeat = setInterval(() => {
+      res.write(': keepalive\n\n');
+    }, 30_000);
+
     const handleEvent = (event: EmailEvent) => {
       if (event.userId === userId) {
         res.write(`data: ${JSON.stringify(event)}\n\n`);
@@ -198,6 +203,7 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
     eventBroadcaster.on(`user:${userId}`, handleEvent);
 
     req.on('close', () => {
+      clearInterval(heartbeat);
       eventBroadcaster.off(`user:${userId}`, handleEvent);
       res.end();
     });
@@ -460,6 +466,25 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
           notifiedAt: { not: null },
           acknowledgedAt: null,
           priorityLabel: { in: ['HIGH', 'high', 'MEDIUM', 'medium'] },
+        },
+        select: {
+          id: true,
+          messageId: true,
+          from: true,
+          subject: true,
+          snippet: true,
+          receivedAt: true,
+          isUnread: true,
+          senderDomain: true,
+          priorityScore: true,
+          priorityLabel: true,
+          priorityReasons: true,
+          deadlineAt: true,
+          deadlineText: true,
+          notifiedAt: true,
+          acknowledgedAt: true,
+          reminderCount: true,
+          snoozedUntil: true,
         },
         orderBy: { receivedAt: 'desc' },
       });

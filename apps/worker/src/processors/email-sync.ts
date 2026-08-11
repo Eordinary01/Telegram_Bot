@@ -102,6 +102,13 @@ export async function processEmailSync(
       return { synced: 0, scored: 0, filtered: 0 };
     }
 
+    // Batch-fetch existing emails to avoid N+1 per-message DB lookups
+    const existingEmails = await prisma.email.findMany({
+      where: { userId, messageId: { in: messageIds } },
+      select: { messageId: true, acknowledgedAt: true, isUnread: true },
+    });
+    const existingMap = new Map(existingEmails.map((e) => [e.messageId, e]));
+
     // Pre-load scoring rules once for this batch to avoid per-email DB queries
     const [preloadedSenderRules, preloadedKeywordRules] = await Promise.all([
       loadSenderRules(prisma, userId),
@@ -118,10 +125,7 @@ export async function processEmailSync(
     for (const messageId of messageIds) {
       try {
         // Skip messages that are already stored and fully processed (acknowledged + not unread)
-        const existing = await prisma.email.findUnique({
-          where: { userId_messageId: { userId, messageId } },
-          select: { id: true, acknowledgedAt: true, isUnread: true },
-        });
+        const existing = existingMap.get(messageId);
         if (existing && existing.acknowledgedAt && !existing.isUnread) {
           skippedCount++;
           continue;

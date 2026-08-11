@@ -1,18 +1,20 @@
 import { Router } from 'express';
 import type { Request, Response } from 'express';
 import type { Queue } from 'bullmq';
+import type { PrismaClient } from '@jecrc/database';
 import { getLogger } from '@jecrc/observability';
 import type { SyncUserEmailsJob } from '@jecrc/queue';
 
 const logger = getLogger('webhooks');
 
 interface WebhookDependencies {
+  prisma: PrismaClient;
   emailSyncQueue: Queue<SyncUserEmailsJob>;
 }
 
 export function createWebhookRouter(dependencies: WebhookDependencies): Router {
   const router = Router();
-  const { emailSyncQueue } = dependencies;
+  const { prisma, emailSyncQueue } = dependencies;
 
   /**
    * POST /webhooks/gmail
@@ -56,13 +58,22 @@ export function createWebhookRouter(dependencies: WebhookDependencies): Router {
 
       logger.info({ emailAddress, historyId }, 'Received Gmail push notification');
 
-      // Look up user by email and queue sync job
-      // For now, we'll just log it - the worker will handle user lookup
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+      // Look up user by email address (Pub/Sub sends email, not UUID)
+      const user = await prisma.user.findUnique({
+        where: { email: emailAddress },
+        select: { id: true },
+      });
+
+      if (!user) {
+        logger.warn({ emailAddress }, 'No user found for email address, ignoring webhook');
+        return res.status(200).json({ success: true, ignored: true });
+      }
+
+      // Queue sync job with the resolved user UUID
       const job = await emailSyncQueue.add(
         'sync-user-emails',
         {
-          userId: emailAddress, // Worker will resolve email to userId
+          userId: user.id,
           triggerSource: 'webhook',
         },
         {
@@ -74,7 +85,7 @@ export function createWebhookRouter(dependencies: WebhookDependencies): Router {
         },
       );
 
-      logger.info({ emailAddress }, 'Queued email sync job');
+      logger.info({ emailAddress, userId: user.id, jobId: job.id }, 'Queued email sync job');
 
       // Acknowledge receipt to Pub/Sub
       res.status(200).json({ success: true });
