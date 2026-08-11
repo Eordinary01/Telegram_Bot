@@ -112,10 +112,21 @@ export async function processEmailSync(
     let syncedCount = 0;
     let scoredCount = 0;
     let filteredCount = 0;
+    let skippedCount = 0;
     let latestHistoryId = syncState.lastHistoryId;
 
     for (const messageId of messageIds) {
       try {
+        // Skip messages that are already stored and fully processed (acknowledged + not unread)
+        const existing = await prisma.email.findUnique({
+          where: { userId_messageId: { userId, messageId } },
+          select: { id: true, acknowledgedAt: true, isUnread: true },
+        });
+        if (existing && existing.acknowledgedAt && !existing.isUnread) {
+          skippedCount++;
+          continue;
+        }
+
         const message = await fetchMessage(oauth2Client, messageId);
 
         // Update latest historyId
@@ -202,7 +213,7 @@ export async function processEmailSync(
     // Update sync state
     await updateSyncState(prisma, userId, latestHistoryId);
 
-    logger.info({ userId, syncedCount, scoredCount, filteredCount }, 'Email sync completed');
+    logger.info({ userId, syncedCount, scoredCount, filteredCount, skippedCount }, 'Email sync completed');
 
     return { synced: syncedCount, scored: scoredCount, filtered: filteredCount };
   } catch (error) {

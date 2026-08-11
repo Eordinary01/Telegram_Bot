@@ -114,9 +114,14 @@ const emailSyncQueue = new Queue<SyncUserEmailsJob>(QueueNames.EMAIL_SYNC, {
 // Periodic automatic background email sync (runs every 2 minutes)
 async function triggerAutoEmailSync(): Promise<void> {
   try {
+    // Only enqueue users who have at least 1 active rule — skip users with 0 rules
     const usersWithTokens = await prisma.user.findMany({
       where: {
         gmailTokens: { some: {} },
+        OR: [
+          { senderRules: { some: { isActive: true } } },
+          { keywordRules: { some: { isActive: true } } },
+        ],
       },
       select: { id: true },
     });
