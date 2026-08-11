@@ -29,7 +29,7 @@ const redisConnection = parseRedisConnection(config.REDIS_URL);
 const workerOpts = {
   connection: redisConnection,
   blockingConnection: true,
-  stalledInterval: 120_000, // Check stalled every 2 min (was 60s)
+  stalledInterval: 600_000, // Check stalled every 10 min (was 2 min) — saves ~18K cmds/day
 };
 
 // Create BullMQ worker for email sync
@@ -99,12 +99,12 @@ await reminderQueue.add(
   'reminder-cron',
   { triggeredBy: 'cron' },
   {
-    repeat: { pattern: '*/30 * * * *' }, // Every 30 minutes (production)
+    repeat: { pattern: '*/60 * * * *' }, // Every 60 minutes (production)
     removeOnComplete: { count: 10 },
     removeOnFail: { count: 20 },
   },
 );
-logger.info('Reminder check cron scheduled (every 30 minutes)');
+logger.info('Reminder check cron scheduled (every 60 minutes)');
 
 // Queue instance to enqueue periodic auto email sync jobs
 const emailSyncQueue = new Queue<SyncUserEmailsJob>(QueueNames.EMAIL_SYNC, {
@@ -131,7 +131,7 @@ async function triggerAutoEmailSync(): Promise<void> {
         `auto-sync-${user.id}`,
         { userId: user.id, triggerSource: 'cron' },
         {
-          jobId: `auto-sync-${user.id}-${Math.floor(Date.now() / (5 * 60 * 1000))}`,
+          jobId: `auto-sync-${user.id}-${Math.floor(Date.now() / (30 * 60 * 1000))}`,
           removeOnComplete: true,
           removeOnFail: true,
         },
@@ -143,12 +143,12 @@ async function triggerAutoEmailSync(): Promise<void> {
   }
 }
 
-// Run auto-sync once immediately on worker start, then every 5 minutes
+// Run auto-sync once immediately on worker start, then every 30 minutes
 void triggerAutoEmailSync();
 const autoSyncInterval = setInterval(() => {
   void triggerAutoEmailSync();
-}, 5 * 60 * 1000); // Every 5 minutes
-logger.info('Periodic background email sync scheduled (every 5 minutes)');
+}, 30 * 60 * 1000); // Every 30 minutes
+logger.info('Periodic background email sync scheduled (every 30 minutes)');
 
 logger.info('Worker is running and waiting for jobs...');
 
