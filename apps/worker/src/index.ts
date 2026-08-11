@@ -131,7 +131,7 @@ async function triggerAutoEmailSync(): Promise<void> {
         `auto-sync-${user.id}`,
         { userId: user.id, triggerSource: 'cron' },
         {
-          jobId: `auto-sync-${user.id}-${Math.floor(Date.now() / (2 * 60 * 1000))}`,
+          jobId: `auto-sync-${user.id}-${Math.floor(Date.now() / (5 * 60 * 1000))}`,
           removeOnComplete: true,
           removeOnFail: true,
         },
@@ -143,12 +143,12 @@ async function triggerAutoEmailSync(): Promise<void> {
   }
 }
 
-// Run auto-sync once immediately on worker start, then every 2 minutes
+// Run auto-sync once immediately on worker start, then every 5 minutes
 void triggerAutoEmailSync();
 const autoSyncInterval = setInterval(() => {
   void triggerAutoEmailSync();
-}, 2 * 60 * 1000); // Every 2 minutes
-logger.info('Periodic background email sync scheduled (every 2 minutes)');
+}, 5 * 60 * 1000); // Every 5 minutes
+logger.info('Periodic background email sync scheduled (every 5 minutes)');
 
 logger.info('Worker is running and waiting for jobs...');
 
