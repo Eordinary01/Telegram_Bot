@@ -55,6 +55,18 @@ describe('Domain Filter', () => {
       expect(isAllowedSender('', ALLOWED)).toBe(false);
       expect(isAllowedSender('jecrcu.edu.in', '')).toBe(false);
     });
+
+    it('supports comma-separated multiple allowed domains', () => {
+      const MULTI = 'jecrcu.edu.in, gmail.com, outlook.com';
+      expect(isAllowedSender('jecrcu.edu.in', MULTI)).toBe(true);
+      expect(isAllowedSender('gmail.com', MULTI)).toBe(true);
+      expect(isAllowedSender('outlook.com', MULTI)).toBe(true);
+      expect(isAllowedSender('yahoo.com', MULTI)).toBe(false);
+    });
+
+    it('supports wildcard * to allow all domains', () => {
+      expect(isAllowedSender('anything.com', '*')).toBe(true);
+    });
   });
 
   describe('checkSenderDomain', () => {

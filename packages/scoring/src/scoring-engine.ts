@@ -215,13 +215,16 @@ export async function scoreEmail(
   // Step 3: Check base domain score for primary university domain
   let baseScore = 0;
   const baseReasons: string[] = [];
-  if (
-    senderDomain &&
-    allowedDomain &&
-    senderDomain.toLowerCase() === allowedDomain.toLowerCase()
-  ) {
-    baseScore += 10;
-    baseReasons.push(`University domain (${allowedDomain})`);
+  if (senderDomain && allowedDomain && allowedDomain.trim() !== '*') {
+    const allowedList = allowedDomain
+      .split(',')
+      .map((d) => d.trim().toLowerCase().replace(/^@/, ''))
+      .filter((d) => d.length > 0);
+
+    if (allowedList.includes(senderDomain.toLowerCase())) {
+      baseScore += 10;
+      baseReasons.push(`University domain (${senderDomain})`);
+    }
   }
 
   // Step 4: Score against sender rules (e.g. nptel.iitm.ac.in, custom senders)

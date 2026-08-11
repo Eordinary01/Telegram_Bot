@@ -33,6 +33,8 @@ const emailSyncWorker = new Worker<SyncUserEmailsJob>(
   {
     connection: redisConnection,
     concurrency: 5, // Process up to 5 jobs concurrently
+    drainDelay: 15, // Wait 15s when queue is empty to reduce Redis command usage
+    stalledInterval: 60000, // Check for stalled jobs every 60s
   },
 );
 
@@ -53,6 +55,8 @@ const reminderCheckWorker = new Worker<ReminderCheckJob>(
   {
     connection: redisConnection,
     concurrency: 1, // Only one reminder check at a time
+    drainDelay: 15,
+    stalledInterval: 60000,
   },
 );
 
@@ -73,6 +77,8 @@ const emailRescanWorker = new Worker<RescanEmailsJob>(
   {
     connection: redisConnection,
     concurrency: 2,
+    drainDelay: 15,
+    stalledInterval: 60000,
   },
 );
 

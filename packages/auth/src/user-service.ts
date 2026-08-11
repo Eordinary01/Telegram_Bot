@@ -41,17 +41,25 @@ export async function createOrUpdateUserFromOAuth(
   const userInfo = await getUserInfo(tokenResult.accessToken);
 
   // Validate user account domain against ALLOWED_SENDER_DOMAIN
-  if (config.ALLOWED_SENDER_DOMAIN) {
-    const emailLower = userInfo.email.toLowerCase();
-    const domainLower = config.ALLOWED_SENDER_DOMAIN.toLowerCase().replace(/^@/, '');
-    if (!emailLower.endsWith(`@${domainLower}`)) {
-      logger.warn(
-        { email: userInfo.email, allowedDomain: config.ALLOWED_SENDER_DOMAIN },
-        'Google OAuth login rejected: user email domain not allowed',
-      );
-      throw new Error(
-        `DOMAIN_RESTRICTED:Access Restricted: Only authorized college email accounts (@${domainLower}) are permitted to sign in for now.`,
-      );
+  if (config.ALLOWED_SENDER_DOMAIN && config.ALLOWED_SENDER_DOMAIN.trim() !== '*') {
+    const allowedList = config.ALLOWED_SENDER_DOMAIN
+      .split(',')
+      .map((d) => d.trim().toLowerCase().replace(/^@/, ''))
+      .filter((d) => d.length > 0);
+
+    if (allowedList.length > 0) {
+      const emailLower = userInfo.email.toLowerCase();
+      const isAllowed = allowedList.some((domain) => emailLower.endsWith(`@${domain}`));
+      if (!isAllowed) {
+        logger.warn(
+          { email: userInfo.email, allowedDomains: allowedList },
+          'Google OAuth login rejected: user email domain not allowed',
+        );
+        const formattedDomains = allowedList.map((d) => `@${d}`).join(', ');
+        throw new Error(
+          `DOMAIN_RESTRICTED:Access Restricted: Only authorized email accounts (${formattedDomains}) are permitted to sign in for now.`,
+        );
+      }
     }
   }
 

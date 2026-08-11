@@ -47,10 +47,18 @@ export function extractSenderDomain(fromHeader: string): string {
 export function isAllowedSender(senderDomain: string, allowedDomain: string): boolean {
   if (!senderDomain || !allowedDomain) return false;
 
-  const normalizedSender = senderDomain.toLowerCase();
-  const normalizedAllowed = allowedDomain.toLowerCase();
+  const trimmed = allowedDomain.trim();
+  if (trimmed === '*') return true;
 
-  return normalizedSender === normalizedAllowed;
+  const normalizedSender = senderDomain.toLowerCase();
+  const allowedList = trimmed
+    .split(',')
+    .map((d) => d.trim().toLowerCase().replace(/^@/, ''))
+    .filter((d) => d.length > 0);
+
+  if (allowedList.length === 0) return false;
+
+  return allowedList.includes(normalizedSender);
 }
 
 /**
