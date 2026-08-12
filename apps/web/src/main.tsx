@@ -57,6 +57,7 @@ function Dashboard() {
   const [userRulesCount, setUserRulesCount] = useState(0);
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [showDevTools, setShowDevTools] = useState(false);
+  const [cameWithToken, setCameWithToken] = useState(false);
 
   const checkUserAuth = useCallback(async () => {
     const token = getToken();
@@ -70,12 +71,14 @@ function Dashboard() {
       setUser(data);
       setIsServerSleeping(false);
     } catch (err) {
-      // If error occurs or token is invalid, clear token
-      clearToken();
+      // If we came from OAuth redirect, don't clear token — server may be waking up
+      if (!cameWithToken) {
+        clearToken();
+      }
     } finally {
       setAuthLoading(false);
     }
-  }, []);
+  }, [cameWithToken]);
 
   // On first load, capture the auth token from the OAuth redirect query and check health/auth
   useEffect(() => {
@@ -84,6 +87,7 @@ function Dashboard() {
 
     if (tokenFromUrl) {
       setToken(tokenFromUrl);
+      setCameWithToken(true);
       // Clean the token out of the URL
       window.history.replaceState({}, '', window.location.pathname);
     }
@@ -220,6 +224,18 @@ function Dashboard() {
     );
   }
 
+  // If we came with a token but auth hasn't succeeded yet, show wakeup card
+  if (cameWithToken && !user && !authLoading) {
+    return (
+      <ServerWakeupCard
+        onReady={() => {
+          setCameWithToken(false);
+          checkUserAuth();
+        }}
+      />
+    );
+  }
+
   if (authLoading) {
     return (
       <div className="app-shell loading-screen">
@@ -234,14 +250,7 @@ function Dashboard() {
   // Login page — redirect to landing if not authenticated
   if (!user) {
     return (
-      <>
-        {manualWakeupPreview && (
-          <ServerWakeupCard
-            isManualTesting={true}
-            onCloseManual={() => setManualWakeupPreview(false)}
-          />
-        )}
-        <main className="login-page">
+      <main className="login-page">
         <section className="glass-card login-card">
           <div className="login-brand-icon">📧</div>
           <h1 className="login-title">JECRC Mail Priority Sync</h1>
@@ -302,7 +311,6 @@ function Dashboard() {
           </a>
         </section>
       </main>
-    </>
     );
   }
 
