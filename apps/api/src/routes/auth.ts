@@ -102,7 +102,7 @@ export function createAuthRouter(dependencies: AuthDependencies): Router {
       }
 
       // Return success page with redirect to Web Dashboard
-      const dashboardUrl = `${config.WEB_ORIGIN}?token=${encodeURIComponent(token)}`;
+      const dashboardUrl = `${config.WEB_ORIGIN}/dashboard?token=${encodeURIComponent(token)}`;
       res.status(200).send(`
         <!DOCTYPE html>
         <html>
