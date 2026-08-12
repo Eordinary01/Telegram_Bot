@@ -70,6 +70,7 @@ function Dashboard() {
       const data = await api<User>('/auth/me');
       setUser(data);
       setIsServerSleeping(false);
+      setCameWithToken(false);
     } catch (err) {
       // If we came from OAuth redirect, don't clear token — server may be waking up
       if (!cameWithToken) {
@@ -205,6 +206,7 @@ function Dashboard() {
   const handleLogout = () => {
     clearToken();
     setUser(null);
+    setCameWithToken(false);
   };
 
   // Onboarding Step Calculations
