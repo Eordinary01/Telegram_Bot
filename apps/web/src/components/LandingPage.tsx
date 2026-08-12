@@ -286,9 +286,9 @@ export function LandingPage() {
             <div className="avatar" style={{ background: '#06b6d4' }}>S</div>
             <div className="avatar" style={{ background: '#f59e0b' }}>R</div>
           </div>
-          <span>
+          {/* <span>
             Trusted by <strong>100+</strong> JECRC students
-          </span>
+          </span> */}
         </div>
       </section>
 

@@ -132,7 +132,7 @@ export function EmailCaptureForm({ lightMode }: EmailCaptureFormProps) {
       {status === 'error' && <p className="form-error">{errorMsg}</p>}
       {position !== null && (
         <p className={`waitlist-count ${lightMode ? 'waitlist-count-light' : ''}`}>
-          <strong>{position}+</strong> JECRC students already on the list
+          {/* <strong>{position}+</strong> JECRC students already on the list */}
         </p>
       )}
     </form>
