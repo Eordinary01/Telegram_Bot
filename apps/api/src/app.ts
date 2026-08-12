@@ -13,6 +13,7 @@ import { createTelegramRouter } from './routes/telegram.js';
 import { createEmailsRouter } from './routes/emails.js';
 import { createMetricsRouter } from './routes/metrics.js';
 import { createRulesRouter } from './routes/rules.js';
+import { createWaitlistRouter } from './routes/waitlist.js';
 import { createRequireAuth } from './middleware/require-auth.js';
 
 export type DependencyCheck = () => Promise<void>;
@@ -125,6 +126,9 @@ export function createApp(dependencies: AppDependencies): Express {
       emailRescanQueue: dependencies.emailRescanQueue,
     }),
   );
+
+  // Waitlist routes (public — no auth required)
+  app.use('/waitlist', createWaitlistRouter({ prisma: dependencies.prisma }));
 
   return app;
 }

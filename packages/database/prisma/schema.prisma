@@ -153,3 +153,14 @@ model TelegramLink {
 
   @@map("telegram_links")
 }
+
+model Waitlist {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String?
+  source    String   @default("landing")
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@map("waitlist")
+}

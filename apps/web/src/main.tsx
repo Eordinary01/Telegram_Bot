@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 
 import './styles.css';
 import { EmailCard, type EmailData } from './components/EmailCard';
@@ -7,6 +8,7 @@ import { TelegramModal } from './components/TelegramModal';
 import { RulesPanel } from './components/RulesPanel';
 import { ThemePicker, initializeTheme } from './components/ThemePicker';
 import { ServerWakeupCard } from './components/ServerWakeupCard';
+import { LandingPage } from './components/LandingPage';
 import { api, getToken, setToken, clearToken, streamUrl, API_URL } from './lib/api';
 
 // Initialize theme from localStorage on app boot
@@ -29,7 +31,7 @@ interface Stats {
   lastSyncAt: string | null;
 }
 
-function App() {
+function Dashboard() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [isServerSleeping, setIsServerSleeping] = useState(false);
@@ -229,7 +231,7 @@ function App() {
     );
   }
 
-  // Login page
+  // Login page — redirect to landing if not authenticated
   if (!user) {
     return (
       <>
@@ -320,7 +322,7 @@ function App() {
         <div className="brand">
           <div className="brand-icon">📬</div>
           <div>
-            <h1 className="brand-title">JECRC Mail Sync</h1>
+            <h1 className="brand-title">PriorityPush</h1>
             <span className="brand-subtitle">Priority Notification Dashboard</span>
           </div>
         </div>
@@ -640,6 +642,12 @@ if (!rootElement) {
 
 ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
-    <App />
+    <BrowserRouter>
+      <Routes>
+        <Route path="/" element={<LandingPage />} />
+        <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
+      </Routes>
+    </BrowserRouter>
   </React.StrictMode>,
 );
