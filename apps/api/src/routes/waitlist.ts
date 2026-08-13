@@ -1,4 +1,4 @@
-import { Router, type Request, type Response } from 'express';
+import { Router, type Request, type Response, type NextFunction, type RequestHandler } from 'express';
 import type { PrismaClient } from '@jecrc/database';
 import nodemailer from 'nodemailer';
 import type { AppConfig } from '@jecrc/config';
@@ -8,6 +8,7 @@ const ADMIN_EMAIL = 'parth.23bcon0051@jecrcu.edu.in';
 interface WaitlistRouterDeps {
   prisma: PrismaClient;
   config: AppConfig;
+  requireAuth: RequestHandler;
 }
 
 // Simple in-memory rate limit: max 5 signups per IP per hour
@@ -111,7 +112,7 @@ function buildFollowupEmailHtml(loginUrl: string, recipientName: string | null):
 
 export function createWaitlistRouter(deps: WaitlistRouterDeps): Router {
   const router = Router();
-  const { prisma, config } = deps;
+  const { prisma, config, requireAuth } = deps;
 
   // POST /waitlist — Join waitlist
   router.post('/', async (req: Request, res: Response) => {
@@ -182,7 +183,7 @@ export function createWaitlistRouter(deps: WaitlistRouterDeps): Router {
   });
 
   // GET /waitlist/all — Get all waitlist entries (admin only)
-  router.get('/all', async (req: Request, res: Response) => {
+  router.get('/all', requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.userId;
       if (!userId) {
@@ -209,7 +210,7 @@ export function createWaitlistRouter(deps: WaitlistRouterDeps): Router {
   });
 
   // POST /waitlist/send-followup — Send follow-up emails to waitlist (admin only)
-  router.post('/send-followup', async (req: Request, res: Response) => {
+  router.post('/send-followup', requireAuth, async (req: Request, res: Response) => {
     try {
       const userId = req.userId;
       if (!userId) {

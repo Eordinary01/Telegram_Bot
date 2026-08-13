@@ -127,8 +127,8 @@ export function createApp(dependencies: AppDependencies): Express {
     }),
   );
 
-  // Waitlist routes (public + admin-protected endpoints)
-  app.use('/waitlist', createWaitlistRouter({ prisma: dependencies.prisma, config: dependencies.config }));
+  // Waitlist routes (public signup + admin-protected management)
+  app.use('/waitlist', createWaitlistRouter({ prisma: dependencies.prisma, config: dependencies.config, requireAuth }));
 
   return app;
 }
