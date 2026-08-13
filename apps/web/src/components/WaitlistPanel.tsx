@@ -17,15 +17,24 @@ export function WaitlistPanel({ onClose }: WaitlistPanelProps) {
   const [entries, setEntries] = useState<WaitlistEntry[]>([]);
   const [loading, setLoading] = useState(true);
   const [sending, setSending] = useState(false);
-  const [subject, setSubject] = useState('PriorityPush is live! Login now →');
+  const [subject, setSubject] = useState('PriorityPush is live for JECRC students! Login now →');
   const [result, setResult] = useState<{ sent: number; failed: number; total: number } | null>(null);
   const [error, setError] = useState('');
 
   useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
     api<{ entries: WaitlistEntry[]; total: number }>('/waitlist/all')
-      .then((data) => setEntries(data.entries))
-      .catch(() => setError('Failed to load waitlist'))
-      .finally(() => setLoading(false));
+      .then((data) => {
+        if (!cancelled) setEntries(data.entries);
+      })
+      .catch((err) => {
+        if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load waitlist');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => { cancelled = true; };
   }, []);
 
   const handleSendFollowup = async () => {
@@ -35,11 +44,14 @@ export function WaitlistPanel({ onClose }: WaitlistPanelProps) {
     setError('');
 
     try {
-      const data = await api<{ sent: number; failed: number; total: number }>(
+      const data = await api<{ sent: number; failed: number; total: number; errors?: string[] }>(
         '/waitlist/send-followup',
         { method: 'POST', body: { subject } },
       );
       setResult(data);
+      if (data.errors && data.errors.length > 0) {
+        setError(`Some emails failed: ${data.errors.slice(0, 3).join('; ')}`);
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to send');
     } finally {
@@ -62,7 +74,12 @@ export function WaitlistPanel({ onClose }: WaitlistPanelProps) {
               <p>Loading waitlist...</p>
             </div>
           ) : error && entries.length === 0 ? (
-            <div className="waitlist-error">{error}</div>
+            <div className="waitlist-error">
+              <p>❌ {error}</p>
+              <p style={{ fontSize: '0.8rem', marginTop: '0.5rem', color: 'var(--text-tertiary)' }}>
+                Make sure you are logged in as admin.
+              </p>
+            </div>
           ) : (
             <>
               <div className="waitlist-stats">
@@ -74,7 +91,7 @@ export function WaitlistPanel({ onClose }: WaitlistPanelProps) {
 
               <div className="waitlist-entries">
                 {entries.length === 0 ? (
-                  <p className="waitlist-empty">No waitlist entries yet.</p>
+                  <p className="waitlist-empty">No waitlist entries yet. Share the landing page to get signups!</p>
                 ) : (
                   entries.map((entry) => (
                     <div key={entry.id} className="waitlist-entry">
@@ -92,7 +109,10 @@ export function WaitlistPanel({ onClose }: WaitlistPanelProps) {
 
               {entries.length > 0 && (
                 <div className="waitlist-send-section">
-                  <h3>Send Follow-up Email</h3>
+                  <h3>✉️ Send Follow-up Email</h3>
+                  <p className="waitlist-send-hint">
+                    This will send a branded email to all {entries.length} waitlist members inviting them to login.
+                  </p>
                   <input
                     type="text"
                     className="waitlist-subject-input"
@@ -105,8 +125,15 @@ export function WaitlistPanel({ onClose }: WaitlistPanelProps) {
                     className="btn btn-primary"
                     onClick={handleSendFollowup}
                     disabled={sending || !subject.trim()}
+                    style={{ width: '100%', marginTop: '0.5rem' }}
                   >
-                    {sending ? 'Sending...' : `Send to ${entries.length} users`}
+                    {sending ? (
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.5rem' }}>
+                        <span className="btn-spinner" /> Sending to {entries.length} users...
+                      </span>
+                    ) : (
+                      `Send to ${entries.length} users`
+                    )}
                   </button>
 
                   {result && (

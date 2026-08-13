@@ -3313,7 +3313,14 @@ body {
   font-size: 1rem;
   font-weight: 600;
   color: var(--text-primary);
+  margin-bottom: 0.5rem;
+}
+
+.waitlist-send-hint {
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
   margin-bottom: 0.75rem;
+  line-height: 1.4;
 }
 
 .waitlist-subject-input {
