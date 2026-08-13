@@ -56,6 +56,8 @@ const environmentSchema = z.object({
       message: 'PUBSUB_TOPIC must be in format: projects/PROJECT_ID/topics/TOPIC_NAME',
     })
     .optional(),
+  SMTP_USER: z.string().email().optional(),
+  SMTP_PASS: z.string().optional(),
 });
 
 export type AppConfig = z.infer<typeof environmentSchema>;
