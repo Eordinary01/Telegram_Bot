@@ -9,6 +9,7 @@ import { RulesPanel } from './components/RulesPanel';
 import { ThemePicker, initializeTheme } from './components/ThemePicker';
 import { ServerWakeupCard } from './components/ServerWakeupCard';
 import { LandingPage } from './components/LandingPage';
+import { WaitlistPanel } from './components/WaitlistPanel';
 import { api, getToken, setToken, clearToken, streamUrl, API_URL } from './lib/api';
 
 // Initialize theme from localStorage on app boot
@@ -57,6 +58,7 @@ function Dashboard() {
   const [userRulesCount, setUserRulesCount] = useState(0);
   const [showThemePicker, setShowThemePicker] = useState(false);
   const [showDevTools, setShowDevTools] = useState(false);
+  const [showWaitlistPanel, setShowWaitlistPanel] = useState(false);
   const [cameWithToken, setCameWithToken] = useState(false);
 
   const checkUserAuth = useCallback(async () => {
@@ -348,6 +350,14 @@ function Dashboard() {
           >
             🎯 Rules ({userRulesCount})
           </button>
+          {isDevUser && (
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={() => setShowWaitlistPanel(true)}
+            >
+              📬 Waitlist
+            </button>
+          )}
           <div style={{ position: 'relative' }}>
             <button
               className={`icon-btn ${showThemePicker ? 'active' : ''}`}
@@ -640,6 +650,11 @@ function Dashboard() {
           onRescanDone={() => fetchData()}
           onRulesUpdated={(count) => setUserRulesCount(count)}
         />
+      )}
+
+      {/* Waitlist Panel (admin only) */}
+      {showWaitlistPanel && (
+        <WaitlistPanel onClose={() => setShowWaitlistPanel(false)} />
       )}
     </div>
   );

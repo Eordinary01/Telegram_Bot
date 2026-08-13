@@ -3194,3 +3194,163 @@ body {
   color: #64748b;
 }
 
+/* ==========================================
+   WAITLIST PANEL
+   ========================================== */
+
+.waitlist-panel {
+  width: 100%;
+  max-width: 500px;
+  max-height: 80vh;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.waitlist-body {
+  padding: 1.5rem;
+  overflow-y: auto;
+  flex: 1;
+}
+
+.waitlist-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 1rem;
+  padding: 2rem;
+  color: var(--text-secondary);
+}
+
+.waitlist-error {
+  color: var(--accent-red);
+  text-align: center;
+  padding: 1rem;
+}
+
+.waitlist-stats {
+  display: flex;
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.waitlist-stat {
+  flex: 1;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1rem;
+  text-align: center;
+}
+
+.waitlist-stat-value {
+  display: block;
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--primary);
+  font-family: 'Outfit', sans-serif;
+}
+
+.waitlist-stat-label {
+  font-size: 0.8rem;
+  color: var(--text-tertiary);
+}
+
+.waitlist-entries {
+  margin-bottom: 1.5rem;
+  max-height: 200px;
+  overflow-y: auto;
+}
+
+.waitlist-entry {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0.75rem;
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.waitlist-entry:last-child {
+  border-bottom: none;
+}
+
+.waitlist-entry-info {
+  display: flex;
+  flex-direction: column;
+}
+
+.waitlist-entry-name {
+  font-weight: 500;
+  color: var(--text-primary);
+  font-size: 0.9rem;
+}
+
+.waitlist-entry-email {
+  color: var(--text-tertiary);
+  font-size: 0.8rem;
+}
+
+.waitlist-entry-date {
+  color: var(--text-tertiary);
+  font-size: 0.75rem;
+}
+
+.waitlist-empty {
+  text-align: center;
+  color: var(--text-tertiary);
+  padding: 1.5rem;
+}
+
+.waitlist-send-section {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  padding: 1.25rem;
+}
+
+.waitlist-send-section h3 {
+  font-family: 'Outfit', sans-serif;
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 0.75rem;
+}
+
+.waitlist-subject-input {
+  width: 100%;
+  padding: 0.75rem;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border-default);
+  background: var(--bg-inset);
+  color: var(--text-primary);
+  font-size: 0.9rem;
+  font-family: inherit;
+  margin-bottom: 0.75rem;
+  outline: none;
+}
+
+.waitlist-subject-input:focus {
+  border-color: var(--primary);
+}
+
+.waitlist-subject-input::placeholder {
+  color: var(--text-tertiary);
+}
+
+.waitlist-result {
+  margin-top: 0.75rem;
+  padding: 0.75rem;
+  border-radius: var(--radius-sm);
+  background: rgba(34, 197, 94, 0.1);
+  border: 1px solid rgba(34, 197, 94, 0.2);
+  color: var(--accent-green);
+  font-size: 0.85rem;
+  text-align: center;
+}
+
+.waitlist-result-error {
+  background: rgba(239, 68, 68, 0.1);
+  border-color: rgba(239, 68, 68, 0.2);
+  color: var(--accent-red);
+}
+
