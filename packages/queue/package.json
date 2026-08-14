@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@jecrc/config": "workspace:*",
+    "@jecrc/observability": "workspace:*",
     "ioredis": "^5.6.1"
   },
   "devDependencies": {
