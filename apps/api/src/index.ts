@@ -3,7 +3,7 @@ import https from 'node:https';
 import { Telegraf } from 'telegraf';
 import { getConfig } from '@jecrc/config';
 import { checkPostgresConnection, disconnectPostgres, getPrismaClient } from '@jecrc/database';
-import { createLogger } from '@jecrc/observability';
+import { createLogger, setGlobalLogLevel } from '@jecrc/observability';
 import { checkRedisConnection, disconnectRedis, QueueNames, parseRedisConnection } from '@jecrc/queue';
 import { Queue } from 'bullmq';
 import type { SyncUserEmailsJob, RescanEmailsJob } from '@jecrc/queue';
@@ -15,6 +15,7 @@ import { createApp } from './app.js';
 dns.setDefaultResultOrder('ipv4first');
 
 const config = getConfig();
+setGlobalLogLevel(config.LOG_LEVEL);
 const logger = createLogger(config.LOG_LEVEL);
 const prisma = getPrismaClient();
 
@@ -43,8 +44,9 @@ const app = createApp({
 
 // --- Telegram Bot Setup ---
 let telegrafBot: Telegraf | undefined;
+const MAX_BOT_RETRIES = 3;
 
-async function startTelegramBot(): Promise<void> {
+async function startTelegramBot(retryCount = 0): Promise<void> {
   if (!config.TELEGRAM_BOT_TOKEN) {
     logger.warn('TELEGRAM_BOT_TOKEN not configured - Telegram bot not started');
     return;
@@ -58,11 +60,25 @@ async function startTelegramBot(): Promise<void> {
     });
     telegrafBot = bot;
 
+    // Global error handler for unhandled Telegraf middleware errors
+    bot.catch((err, ctx) => {
+      logger.error({ error: err, updateType: ctx?.updateType }, 'Unhandled Telegraf error');
+    });
+
     configureBot(bot, prisma);
     await startBot(bot);
   } catch (error) {
-    logger.warn({ error }, 'Telegram bot failed to start - continuing without bot');
+    logger.error({ error, retryCount: retryCount + 1 }, 'Telegram bot failed to start');
     telegrafBot = undefined;
+
+    if (retryCount < MAX_BOT_RETRIES) {
+      const backoffMs = Math.min(1000 * 2 ** retryCount, 30_000);
+      logger.info({ backoffMs, retriesLeft: MAX_BOT_RETRIES - retryCount - 1 }, 'Retrying Telegram bot start');
+      await new Promise((resolve) => setTimeout(resolve, backoffMs));
+      void startTelegramBot(retryCount + 1);
+    } else {
+      logger.warn('Max Telegram bot retries exhausted - continuing without bot');
+    }
   }
 }
 
@@ -152,3 +168,13 @@ function shutdown(signal: string): void {
 
 process.on('SIGINT', () => void shutdown('SIGINT'));
 process.on('SIGTERM', () => void shutdown('SIGTERM'));
+
+// Global error handlers to prevent silent crashes
+process.on('uncaughtException', (err) => {
+  logger.fatal({ error: err }, 'Uncaught exception — process will exit');
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  logger.error({ error: reason }, 'Unhandled promise rejection');
+});

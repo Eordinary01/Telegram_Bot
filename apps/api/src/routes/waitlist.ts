@@ -2,6 +2,9 @@ import { Router, type Request, type Response, type NextFunction, type RequestHan
 import type { PrismaClient } from '@jecrc/database';
 import nodemailer from 'nodemailer';
 import type { AppConfig } from '@jecrc/config';
+import { getLogger } from '@jecrc/observability';
+
+const logger = getLogger('waitlist-routes');
 
 const ADMIN_EMAIL = 'parth.23bcon0051@jecrcu.edu.in';
 
@@ -166,7 +169,7 @@ export function createWaitlistRouter(deps: WaitlistRouterDeps): Router {
         id: entry.id,
       });
     } catch (error) {
-      console.error('Waitlist signup error:', error);
+      logger.error({ error }, 'Waitlist signup error');
       res.status(500).json({ error: 'Something went wrong. Please try again.' });
     }
   });
@@ -177,7 +180,7 @@ export function createWaitlistRouter(deps: WaitlistRouterDeps): Router {
       const count = await prisma.waitlist.count();
       res.json({ count });
     } catch (error) {
-      console.error('Waitlist count error:', error);
+      logger.error({ error }, 'Waitlist count error');
       res.status(500).json({ error: 'Failed to fetch count' });
     }
   });
@@ -204,7 +207,7 @@ export function createWaitlistRouter(deps: WaitlistRouterDeps): Router {
 
       res.json({ entries, total: entries.length });
     } catch (error) {
-      console.error('Waitlist fetch error:', error);
+      logger.error({ error }, 'Waitlist fetch error');
       res.status(500).json({ error: 'Failed to fetch waitlist' });
     }
   });
@@ -288,7 +291,7 @@ export function createWaitlistRouter(deps: WaitlistRouterDeps): Router {
         errors: errors.length > 0 ? errors : undefined,
       });
     } catch (error) {
-      console.error('Follow-up send error:', error);
+      logger.error({ error }, 'Follow-up send error');
       res.status(500).json({ error: 'Failed to send follow-up emails' });
     }
   });

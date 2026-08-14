@@ -461,6 +461,7 @@ export function configureBot(
         logger.error({ error, messageId }, 'Error marking email as read via callback');
         await ctx.answerCbQuery('❌ Failed to mark email as read');
       }
+      return;
     }
   });
 

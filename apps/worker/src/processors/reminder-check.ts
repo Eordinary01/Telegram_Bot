@@ -8,15 +8,15 @@ import type { ReminderCheckJob } from '@jecrc/queue';
 const logger = getLogger('reminder-check-processor');
 
 /**
- * Escalation intervals (Testing Mode):
- * - reminderCount 0 → first reminder after 5 minutes
- * - reminderCount 1 → second reminder after 10 minutes
- * - reminderCount 2 → final reminder after 15 minutes
+ * Escalation intervals (Production):
+ * - reminderCount 0 → first reminder after 2 hours
+ * - reminderCount 1 → second reminder after 4 hours
+ * - reminderCount 2 → final reminder after 18 hours
  */
 const ESCALATION_INTERVALS_MS: Record<number, number> = {
-  0: 5 * 60 * 1000,    // 5 minutes
-  1: 10 * 60 * 1000,   // 10 minutes
-  2: 15 * 60 * 1000,   // 15 minutes
+  0: 2 * 60 * 60 * 1000,    // 2 hours
+  1: 4 * 60 * 60 * 1000,    // 4 hours
+  2: 18 * 60 * 60 * 1000,   // 18 hours
 };
 
 const MAX_REMINDERS = 3;
@@ -31,7 +31,7 @@ interface ReminderCheckResult {
  * Processes reminder checks: finds all notified-but-unacknowledged emails
  * and sends escalating reminders based on timing thresholds.
  *
- * Runs as a repeatable BullMQ job every 30 minutes.
+ * Runs as a repeatable BullMQ job every 60 minutes.
  */
 export async function processReminderCheck(
   job: Job<ReminderCheckJob>,

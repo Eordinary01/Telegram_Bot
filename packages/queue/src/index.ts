@@ -1,4 +1,7 @@
 import { Redis } from 'ioredis';
+import { getLogger } from '@jecrc/observability';
+
+const logger = getLogger('redis');
 
 let redisClient: Redis | undefined;
 
@@ -13,7 +16,9 @@ export function getRedisClient(redisUrl: string): Redis {
     lazyConnect: true,
     maxRetriesPerRequest: 1,
   });
-  redisClient.on('error', () => undefined);
+  redisClient.on('error', (err) => {
+    logger.error({ error: err }, 'Redis connection error');
+  });
   return redisClient;
 }
 

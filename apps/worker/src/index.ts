@@ -1,7 +1,7 @@
 import dns from 'node:dns';
 import { getConfig } from '@jecrc/config';
 import { checkPostgresConnection, disconnectPostgres, getPrismaClient } from '@jecrc/database';
-import { createLogger } from '@jecrc/observability';
+import { createLogger, setGlobalLogLevel } from '@jecrc/observability';
 import { checkRedisConnection, disconnectRedis, QueueNames, parseRedisConnection } from '@jecrc/queue';
 
 // Force IPv4 first to prevent Windows IPv6 DNS connection timeouts to api.telegram.org
@@ -14,6 +14,7 @@ import { processReminderCheck } from './processors/reminder-check.js';
 import { processEmailRescan } from './processors/email-rescan.js';
 
 const config = getConfig();
+setGlobalLogLevel(config.LOG_LEVEL);
 const logger = createLogger(config.LOG_LEVEL);
 const prisma = getPrismaClient();
 
@@ -114,14 +115,10 @@ const emailSyncQueue = new Queue<SyncUserEmailsJob>(QueueNames.EMAIL_SYNC, {
 // Periodic automatic background email sync (runs every 2 minutes)
 async function triggerAutoEmailSync(): Promise<void> {
   try {
-    // Only enqueue users who have at least 1 active rule — skip users with 0 rules
+    // Only enqueue users who have Gmail tokens — the processor will check for rules
     const usersWithTokens = await prisma.user.findMany({
       where: {
         gmailTokens: { some: {} },
-        OR: [
-          { senderRules: { some: { isActive: true } } },
-          { keywordRules: { some: { isActive: true } } },
-        ],
       },
       select: { id: true },
     });
@@ -166,3 +163,13 @@ async function shutdown(signal: string): Promise<void> {
 
 process.on('SIGINT', () => void shutdown('SIGINT'));
 process.on('SIGTERM', () => void shutdown('SIGTERM'));
+
+// Global error handlers to prevent silent crashes
+process.on('uncaughtException', (err) => {
+  logger.fatal({ error: err }, 'Uncaught exception — process will exit');
+  process.exit(1);
+});
+
+process.on('unhandledRejection', (reason) => {
+  logger.error({ error: reason }, 'Unhandled promise rejection');
+});

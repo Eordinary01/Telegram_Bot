@@ -17,6 +17,16 @@ const redactedPaths = [
   '*.GOOGLE_CLIENT_SECRET',
 ];
 
+let globalLogLevel: string | undefined;
+
+/**
+ * Sets the global log level used by all getLogger() calls.
+ * Should be called once at startup with the configured LOG_LEVEL.
+ */
+export function setGlobalLogLevel(level: string): void {
+  globalLogLevel = level;
+}
+
 export function createLogger(level = 'info'): Logger {
   return pino({
     level,
@@ -29,10 +39,12 @@ export function createLogger(level = 'info'): Logger {
 
 /**
  * Creates a child logger with a specific name/context.
+ * Uses the global log level set via setGlobalLogLevel() if no explicit level is provided.
  * @param name - Logger name for context
- * @param level - Optional log level (defaults to 'info')
+ * @param level - Optional log level (defaults to the global level or 'info')
  */
-export function getLogger(name: string, level = 'info'): Logger {
-  const logger = createLogger(level);
+export function getLogger(name: string, level?: string): Logger {
+  const loggerLevel = level ?? globalLogLevel ?? 'info';
+  const logger = createLogger(loggerLevel);
   return logger.child({ name });
 }
