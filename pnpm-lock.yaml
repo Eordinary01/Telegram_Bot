@@ -279,6 +279,9 @@ importers:
       '@jecrc/config':
         specifier: workspace:*
         version: link:../config
+      '@jecrc/observability':
+        specifier: workspace:*
+        version: link:../observability
       ioredis:
         specifier: ^5.6.1
         version: 5.11.1
