@@ -23,4 +23,4 @@ ENV SERVICE=api
 
 EXPOSE 3000
 
-CMD pnpm --filter "@jecrc/${SERVICE}" exec tsx src/index.ts
+CMD pnpm --filter @jecrc/database exec prisma migrate deploy && pnpm --filter "@jecrc/${SERVICE}" exec tsx src/index.ts
