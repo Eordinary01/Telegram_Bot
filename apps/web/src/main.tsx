@@ -22,6 +22,7 @@ interface User {
   name: string | null;
   hasGmailToken: boolean;
   role: string | null;
+  isAdmin: boolean;
 }
 
 interface Stats {
@@ -165,8 +166,7 @@ function Dashboard() {
     };
   }, [user, fetchData]);
 
-  const DEV_EMAIL = 'parth.23bcon0051@jecrcu.edu.in';
-  const isDevUser = user?.email?.toLowerCase() === DEV_EMAIL.toLowerCase();
+  const isDevUser = user?.isAdmin ?? false;
 
   const handleInjectTest = async (type: string = 'placement') => {
     if (!user || !isDevUser) return;
@@ -643,7 +643,7 @@ function Dashboard() {
                 ? `You must configure at least 3 priority rules before syncing emails (${userRulesCount}/3 created).`
                 : searchTerm
                 ? 'No emails match your search filter. Try adjusting your keywords.'
-                : 'Click "Sync Now" to fetch recent messages from your connected @jecrcu.edu.in account.'}
+                : 'Click "Sync Now" to fetch recent messages from your connected email account.'}
             </p>
             {!searchTerm && (
               <button
@@ -693,6 +693,7 @@ ReactDOM.createRoot(rootElement).render(
       <Routes>
         <Route path="/" element={<LandingPage />} />
         <Route path="/dashboard" element={<Dashboard />} />
+        <Route path="/onboarding/role" element={<RolePicker />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </BrowserRouter>

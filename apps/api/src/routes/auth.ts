@@ -231,6 +231,9 @@ export function createAuthRouter(dependencies: AuthDependencies): Router {
           name: user.name,
           role: user.role ?? null,
           hasGmailToken: (user.gmailTokens?.length ?? 0) > 0,
+          isAdmin: config.ADMIN_EMAIL
+            ? user.email.toLowerCase() === config.ADMIN_EMAIL.toLowerCase()
+            : false,
         });
       } catch (error) {
         logger.error({ error }, 'Failed to get current user');

@@ -58,6 +58,7 @@ const environmentSchema = z.object({
     .optional(),
   SMTP_USER: z.string().email().optional(),
   SMTP_PASS: z.string().optional(),
+  ADMIN_EMAIL: z.string().email().optional(),
 });
 
 export type AppConfig = z.infer<typeof environmentSchema>;

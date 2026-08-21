@@ -39,6 +39,7 @@ describe('auth /me endpoint', () => {
       name: 'Test Student',
       role: null,
       hasGmailToken: false,
+      isAdmin: false,
     });
   });
 

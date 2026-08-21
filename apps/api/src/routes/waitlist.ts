@@ -6,7 +6,7 @@ import { getLogger } from '@jecrc/observability';
 
 const logger = getLogger('waitlist-routes');
 
-const ADMIN_EMAIL = 'parth.23bcon0051@jecrcu.edu.in';
+const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 
 interface WaitlistRouterDeps {
   prisma: PrismaClient;
@@ -15,7 +15,6 @@ interface WaitlistRouterDeps {
 }
 
 // Simple in-memory rate limit: max 5 signups per IP per hour
-const rateLimitMap = new Map<string, { count: number; resetAt: number }>();
 const RATE_LIMIT_WINDOW = 60 * 60 * 1000; // 1 hour
 const RATE_LIMIT_MAX = 5;
 
@@ -77,10 +76,10 @@ function buildFollowupEmailHtml(loginUrl: string, recipientName: string | null):
             <td style="padding:36px 30px;">
               <h2 style="color:#1e293b;font-size:20px;font-weight:600;margin:0 0 16px 0;">Hey ${displayName} 👋</h2>
               <p style="color:#475569;font-size:15px;line-height:1.7;margin:0 0 20px 0;">
-                PriorityPush is now live for JECRC University students! You joined our waitlist and we wanted to let you know — you can start using it right now.
+                PriorityPush is now live! You joined our waitlist and we wanted to let you know — you can start using it right now.
               </p>
               <p style="color:#475569;font-size:15px;line-height:1.7;margin:0 0 28px 0;">
-                Connect your <strong>@jecrcu.edu.in</strong> Google account and get real-time Telegram alerts for placement emails, exam notices, and faculty updates — scored by priority, delivered instantly.
+                Connect your Google account and get real-time Telegram alerts for important emails — scored by priority, delivered instantly.
               </p>
               <!-- CTA Button -->
               <table cellpadding="0" cellspacing="0" style="margin:0 auto;">
@@ -101,7 +100,7 @@ function buildFollowupEmailHtml(loginUrl: string, recipientName: string | null):
           <tr>
             <td style="background:#f8fafc;padding:24px 30px;border-top:1px solid #e2e8f0;">
               <p style="color:#94a3b8;font-size:12px;margin:0;text-align:center;">
-                Built for JECRC University students · Privacy first · Open source
+                Privacy first · Open source
               </p>
             </td>
           </tr>
@@ -195,7 +194,7 @@ export function createWaitlistRouter(deps: WaitlistRouterDeps): Router {
       }
 
       const user = await prisma.user.findUnique({ where: { id: userId } });
-      if (!user || user.email.toLowerCase() !== ADMIN_EMAIL) {
+      if (!user || !config.ADMIN_EMAIL || user.email.toLowerCase() !== config.ADMIN_EMAIL.toLowerCase()) {
         res.status(403).json({ error: 'Admin access required' });
         return;
       }
@@ -222,7 +221,7 @@ export function createWaitlistRouter(deps: WaitlistRouterDeps): Router {
       }
 
       const user = await prisma.user.findUnique({ where: { id: userId } });
-      if (!user || user.email.toLowerCase() !== ADMIN_EMAIL) {
+      if (!user || !config.ADMIN_EMAIL || user.email.toLowerCase() !== config.ADMIN_EMAIL.toLowerCase()) {
         res.status(403).json({ error: 'Admin access required' });
         return;
       }
@@ -247,7 +246,7 @@ export function createWaitlistRouter(deps: WaitlistRouterDeps): Router {
       const transporter = nodemailer.createTransport({
         service: 'gmail',
         auth: {
-          user: config.SMTP_USER || ADMIN_EMAIL,
+          user: config.SMTP_USER || config.ADMIN_EMAIL,
           pass: config.SMTP_PASS,
         },
       });
@@ -263,7 +262,7 @@ export function createWaitlistRouter(deps: WaitlistRouterDeps): Router {
         const promises = batch.map(async (entry) => {
           try {
             await transporter.sendMail({
-              from: `"PriorityPush" <${config.SMTP_USER || ADMIN_EMAIL}>`,
+              from: `"PriorityPush" <${config.SMTP_USER || config.ADMIN_EMAIL}>`,
               to: entry.email,
               subject,
               html: buildFollowupEmailHtml(loginUrl, entry.name),

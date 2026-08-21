@@ -223,7 +223,8 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
       }
 
       const user = await prisma.user.findUnique({ where: { id: userId } });
-      if (!user || user.email.toLowerCase() !== 'parth.23bcon0051@jecrcu.edu.in') {
+      const adminEmail = config.ADMIN_EMAIL?.toLowerCase();
+      if (!user || !adminEmail || user.email.toLowerCase() !== adminEmail) {
         return res
           .status(403)
           .json({ error: 'Developer tools are restricted to authorized accounts.' });
@@ -237,18 +238,18 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
         messageId: `test-msg-${randomId}`,
         threadId: `test-thread-${randomId}`,
         historyId: `hist-${Date.now()}`,
-        from: 'placement.cell@jecrcu.edu.in',
-        subject: '🚨 URGENT: Campus Placement Drive by Deloitte (2026 Batch)',
+        from: 'notifications@company.com',
+        subject: '🚨 URGENT: Important Team Update — Action Required',
         snippet:
-          'Mandatory registration link for Deloitte Placement Drive. Shortlisted candidates must submit resume by 5 PM today.',
+          'Mandatory registration link for the upcoming team event. Please submit your response by end of day.',
         receivedAt: now,
         isUnread: true,
         labels: ['INBOX'],
-        senderDomain: 'jecrcu.edu.in',
+        senderDomain: 'company.com',
         priorityScore: 120,
         priorityLabel: 'HIGH',
         priorityReasons: [
-          'Placement Notice (+50)',
+          'Important Keyword (+50)',
           'Urgent Keyword (+40)',
           'Allowed Domain Suffix (+30)',
         ],
@@ -257,21 +258,21 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
       if (type === 'exam') {
         emailData = {
           ...emailData,
-          from: 'examcell@jecrcu.edu.in',
-          subject: '📝 IMPORTANT: End-Term Examination Schedule Released',
+          from: 'scheduler@company.com',
+          subject: '📝 IMPORTANT: Schedule Update — Please Review',
           snippet:
-            'The final examination schedule for B.Tech Semester VI is attached. Practical exams begin next Monday.',
+            'The schedule for next week has been updated. Please review the changes and confirm your availability.',
           priorityScore: 90,
           priorityLabel: 'HIGH',
-          priorityReasons: ['Exam Schedule (+50)', 'Allowed Domain Suffix (+40)'],
+          priorityReasons: ['Schedule Notice (+50)', 'Allowed Domain Suffix (+40)'],
         };
       } else if (type === 'low') {
         emailData = {
           ...emailData,
-          from: 'library@jecrcu.edu.in',
-          subject: '📚 Weekly Library Newsletter #18',
+          from: 'newsletter@company.com',
+          subject: '📚 Weekly Team Newsletter #18',
           snippet:
-            'Check out the new arrival of computer science and AI reference books in the central library.',
+            'Check out the latest updates, new resources, and announcements from the team.',
           priorityScore: 15,
           priorityLabel: 'LOW',
           priorityReasons: ['Allowed Domain Suffix (+15)'],
@@ -340,7 +341,8 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
       }
 
       const user = await prisma.user.findUnique({ where: { id: userId } });
-      if (!user || user.email.toLowerCase() !== 'parth.23bcon0051@jecrcu.edu.in') {
+      const adminEmail = config.ADMIN_EMAIL?.toLowerCase();
+      if (!user || !adminEmail || user.email.toLowerCase() !== adminEmail) {
         return res
           .status(403)
           .json({ error: 'Developer tools are restricted to authorized accounts.' });

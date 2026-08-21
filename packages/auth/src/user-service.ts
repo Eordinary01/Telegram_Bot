@@ -49,7 +49,8 @@ export async function createOrUpdateUserFromOAuth(
 
     if (allowedList.length > 0) {
       const emailLower = userInfo.email.toLowerCase();
-      const isAllowed = allowedList.some((domain) => emailLower.endsWith(`@${domain}`));
+      const emailDomain = emailLower.split('@')[1] ?? '';
+      const isAllowed = allowedList.includes(emailDomain);
       if (!isAllowed) {
         logger.warn(
           { email: userInfo.email, allowedDomains: allowedList },
