@@ -8,6 +8,8 @@ services:
     envVars:
       - key: SERVICE
         value: api
+      - key: ENABLE_EMBEDDED_WORKER
+        value: "false"
       - key: NODE_ENV
         value: production
       - key: API_HOST
