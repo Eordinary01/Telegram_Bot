@@ -90,7 +90,7 @@ export async function getUserRulesWithRole(
 
   return {
     role: user?.role ?? null,
-    userKeywords: userKeywords.map((r) => ({
+    userKeywords: userKeywords.map((r: any) => ({
       id: r.id,
       keyword: r.keyword,
       weight: r.weight,
@@ -98,7 +98,7 @@ export async function getUserRulesWithRole(
       matchField: r.matchField,
       isActive: r.isActive,
     })),
-    globalKeywords: globalKeywords.map((r) => ({
+    globalKeywords: globalKeywords.map((r: any) => ({
       id: r.id,
       keyword: r.keyword,
       weight: r.weight,
@@ -106,14 +106,14 @@ export async function getUserRulesWithRole(
       matchField: r.matchField,
       isActive: r.isActive,
     })),
-    userSenders: userSenders.map((r) => ({
+    userSenders: userSenders.map((r: any) => ({
       id: r.id,
       domain: r.domain,
       label: r.label,
       weight: r.weight,
       isActive: r.isActive,
     })),
-    globalSenders: globalSenders.map((r) => ({
+    globalSenders: globalSenders.map((r: any) => ({
       id: r.id,
       domain: r.domain,
       label: r.label,

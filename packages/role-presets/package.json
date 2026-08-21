@@ -12,6 +12,7 @@
     "typecheck": "tsc --noEmit"
   },
   "devDependencies": {
+    "@jecrc/database": "workspace:*",
     "@types/node": "^22.0.0",
     "typescript": "^5.8.0"
   }

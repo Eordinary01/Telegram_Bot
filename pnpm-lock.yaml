@@ -301,6 +301,9 @@ importers:
 
   packages/role-presets:
     devDependencies:
+      '@jecrc/database':
+        specifier: workspace:*
+        version: link:../database
       '@types/node':
         specifier: ^22.0.0
         version: 22.20.1
