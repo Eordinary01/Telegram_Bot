@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useSearchParams } from 'react-router-dom';
-import { API_URL } from './lib/api';
+import { API_URL } from '../lib/api';
 
 /**
  * Onboarding Role Picker

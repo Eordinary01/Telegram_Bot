@@ -216,7 +216,10 @@ export function createAuthRouter(dependencies: AuthDependencies): Router {
           return res.status(401).json({ error: 'Not authenticated' });
         }
 
-        const user = await prisma.user.findUnique({ where: { id: userId } });
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          include: { gmailTokens: true },
+        });
 
         if (!user) {
           return res.status(404).json({ error: 'No user found' });

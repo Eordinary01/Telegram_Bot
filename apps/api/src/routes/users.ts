@@ -8,6 +8,7 @@ import { getLogger } from '@jecrc/observability';
 import {
   ROLE_PRESETS,
   AVAILABLE_ROLES,
+  VALID_ROLES,
   type Role,
   type RolePreset,
 } from '@jecrc/role-presets';

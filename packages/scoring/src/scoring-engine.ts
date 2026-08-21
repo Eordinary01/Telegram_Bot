@@ -220,9 +220,11 @@ export async function scoreEmail(
   //   null/empty → no domain restriction (all senders pass the gate)
   //   comma-separated list e.g. "jecrcu.edu.in,abc.edu.in" → exact suffix match
   const allowedList = allowedDomain
-    .split(',')
-    .map((d) => d.trim().toLowerCase().replace(/^@/, ''))
-    .filter((d) => d.length > 0);
+    ? allowedDomain
+        .split(',')
+        .map((d) => d.trim().toLowerCase().replace(/^@/, ''))
+        .filter((d) => d.length > 0)
+    : [];
 
   if (senderDomain && allowedDomain && allowedDomain.trim().toLowerCase() !== '*') {
     if (allowedList.includes(senderDomain.toLowerCase())) {

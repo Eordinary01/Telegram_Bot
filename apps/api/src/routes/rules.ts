@@ -29,33 +29,34 @@ export type Impact = keyof typeof IMPACT_WEIGHTS;
 
 const VALID_MATCH_FIELDS = ['subject', 'snippet', 'any'] as const;
 
+/**
+ * Enqueues a background re-score of the user's existing emails.
+ * Non-blocking: a queue failure never fails the mutation response.
+ */
+export async function queueRescan(
+  userId: string,
+  emailRescanQueue: Queue<RescanEmailsJob>,
+): Promise<{ queued: boolean; jobId: string | undefined }> {
+  try {
+    const job = await emailRescanQueue.add(
+      'rescan-user-emails',
+      { userId },
+      {
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 2000 },
+      },
+    );
+    logger.info({ userId, jobId: job.id }, 'Email re-scan queued after rule change');
+    return { queued: true, jobId: job.id ?? undefined };
+  } catch (error) {
+    logger.error({ error, userId }, 'Failed to queue auto re-scan after rule change');
+    return { queued: false, jobId: undefined };
+  }
+}
+
 export function createRulesRouter(dependencies: RulesDependencies): Router {
   const router = Router();
   const { prisma, emailRescanQueue } = dependencies;
-
-  /**
-   * Enqueues a background re-score of the user's existing emails.
-   * Non-blocking: a queue failure never fails the mutation response.
-   */
-  async function queueRescan(
-    userId: string,
-  ): Promise<{ queued: boolean; jobId: string | undefined }> {
-    try {
-      const job = await emailRescanQueue.add(
-        'rescan-user-emails',
-        { userId },
-        {
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 2000 },
-        },
-      );
-      logger.info({ userId, jobId: job.id }, 'Email re-scan queued after rule change');
-      return { queued: true, jobId: job.id ?? undefined };
-    } catch (error) {
-      logger.error({ error, userId }, 'Failed to queue auto re-scan after rule change');
-      return { queued: false, jobId: undefined };
-    }
-  }
 
   /**
    * GET /rules
@@ -139,7 +140,7 @@ export function createRulesRouter(dependencies: RulesDependencies): Router {
             weight,
           },
         });
-        const rescan = await queueRescan(userId);
+        const rescan = await queueRescan(userId, emailRescanQueue);
         return res.status(201).json({ rule: created, rescan });
       }
 
@@ -152,7 +153,7 @@ export function createRulesRouter(dependencies: RulesDependencies): Router {
           category: 'user',
         },
       });
-      const rescan = await queueRescan(userId);
+      const rescan = await queueRescan(userId, emailRescanQueue);
       return res.status(201).json({ rule: created, rescan });
     } catch (error) {
       logger.error({ error }, 'Failed to create rule');
@@ -238,12 +239,12 @@ export function createRulesRouter(dependencies: RulesDependencies): Router {
 
       if (keyword) {
         const updated = await prisma.keywordRule.update({ where: { id }, data });
-        const rescan = await queueRescan(userId);
+        const rescan = await queueRescan(userId, emailRescanQueue);
         return res.status(200).json({ rule: updated, rescan });
       }
 
       const updated = await prisma.senderRule.update({ where: { id }, data });
-      const rescan = await queueRescan(userId);
+      const rescan = await queueRescan(userId, emailRescanQueue);
       return res.status(200).json({ rule: updated, rescan });
     } catch (error) {
       logger.error({ error }, 'Failed to update rule');
@@ -282,7 +283,7 @@ export function createRulesRouter(dependencies: RulesDependencies): Router {
         await prisma.senderRule.delete({ where: { id } });
       }
 
-      const rescan = await queueRescan(userId);
+      const rescan = await queueRescan(userId, emailRescanQueue);
       return res.status(200).json({ message: 'Rule deleted', rescan });
     } catch (error) {
       logger.error({ error }, 'Failed to delete rule');

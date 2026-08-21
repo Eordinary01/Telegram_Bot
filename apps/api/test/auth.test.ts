@@ -70,6 +70,7 @@ describe('auth /me endpoint', () => {
     expect(response.body.id).toBe('user-1');
     expect(mockPrisma.user.findUnique).toHaveBeenCalledWith({
       where: { id: 'user-1' },
+      include: { gmailTokens: true },
     });
   });
 });

@@ -81,7 +81,7 @@ export async function getUserRulesWithRole(
   globalSenders: Array<{ id: string; domain: string; label: string; weight: number; isActive: boolean }>;
 }> {
   const [user, userKeywords, globalKeywords, userSenders, globalSenders] = await Promise.all([
-    prisma.user.findUnique({ where: { id: userId }, select: { role: true } }),
+    prisma.user.findUnique({ where: { id: userId }, select: { role: true } } as any),
     prisma.keywordRule.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } }),
     prisma.keywordRule.findMany({ where: { userId: null, isActive: true }, orderBy: { keyword: 'asc' } }),
     prisma.senderRule.findMany({ where: { userId }, orderBy: { createdAt: 'desc' } }),

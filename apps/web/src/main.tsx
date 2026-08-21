@@ -21,6 +21,7 @@ interface User {
   email: string;
   name: string | null;
   hasGmailToken: boolean;
+  role: string | null;
 }
 
 interface Stats {
