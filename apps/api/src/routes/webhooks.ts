@@ -32,23 +32,23 @@ export function createWebhookRouter(dependencies: WebhookDependencies): Router {
    */
   router.post('/gmail', async (req: Request, res: Response) => {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+       
       const { message } = req.body;
 
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
+       
       if (!message || !message.data) {
         logger.warn('Received Pub/Sub notification without message data');
         return res.status(400).json({ error: 'Invalid Pub/Sub message format' });
       }
 
       // Decode the base64 message data
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-argument, @typescript-eslint/no-unsafe-member-access
+       
       const decodedData = Buffer.from(message.data, 'base64').toString('utf-8');
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+       
       const notification = JSON.parse(decodedData);
 
       // Gmail notification contains: { emailAddress: string, historyId: string }
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+       
       const { emailAddress, historyId } = notification;
 
       if (!emailAddress || !historyId) {

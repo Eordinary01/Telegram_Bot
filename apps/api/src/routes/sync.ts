@@ -107,7 +107,7 @@ export function createSyncRouter(dependencies: SyncDependencies): Router {
       const state = await job.getState();
       const progress = job.progress;
       const returnValue = job.returnvalue;
-      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+       
       const failedReason = job.failedReason;
 
       res.status(200).json({

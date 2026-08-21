@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any */
+ 
 import request from 'supertest';
 import { describe, expect, it, vi } from 'vitest';
 

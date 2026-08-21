@@ -90,7 +90,7 @@ export async function fetchHistoryChanges(
 
     return messageIds;
   } catch (error: unknown) {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     if ((error as any)?.code === 404) {
       logger.warn({ startHistoryId }, 'History ID not found, full sync needed');
       throw new Error('HISTORY_ID_TOO_OLD');

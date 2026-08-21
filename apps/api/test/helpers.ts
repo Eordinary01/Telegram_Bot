@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any, @typescript-eslint/no-unsafe-member-access, @typescript-eslint/no-unsafe-argument */
+ 
 import { vi } from 'vitest';
 import type { Queue } from 'bullmq';
 import { signAuthToken } from '@jecrc/auth';

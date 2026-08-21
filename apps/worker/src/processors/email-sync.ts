@@ -135,7 +135,7 @@ export async function processEmailSync(
     // Fetch and process each message
     let syncedCount = 0;
     let scoredCount = 0;
-    let filteredCount = 0;
+    const filteredCount = 0;
     let skippedCount = 0;
     let latestHistoryId = syncState.lastHistoryId;
 

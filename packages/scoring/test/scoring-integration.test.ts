@@ -3,7 +3,7 @@ import type { PrismaClient } from '@jecrc/database';
 import { scoreEmail } from '../src/scoring-engine.js';
 
 // Mock database rules
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
+ 
 function createMockPrisma(senderRules: any[] = [], keywordRules: any[] = []): PrismaClient {
   return {
     senderRule: {
