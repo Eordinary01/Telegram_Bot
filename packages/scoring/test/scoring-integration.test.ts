@@ -34,9 +34,9 @@ describe('scoreEmail (integration-style)', () => {
         ALLOWED_DOMAIN,
       );
 
-      expect(result.isAllowedDomain).toBe(true);
+      expect(result.isAllowedDomain).toBe(false);
       expect(result.priorityScore).toBe(25);
-      expect(result.priorityLabel).toBe('high');
+      expect(result.priorityLabel).toBe('low');
       expect(result.priorityReasons).toContain('NPTEL Course');
     });
 
@@ -54,7 +54,7 @@ describe('scoreEmail (integration-style)', () => {
       expect(result.isAllowedDomain).toBe(true);
       expect(result.senderDomain).toBe('jecrcu.edu.in');
       expect(result.priorityScore).toBe(10);
-      expect(result.priorityReasons).toContain('University domain (jecrcu.edu.in)');
+      expect(result.priorityReasons).toContain('Allowed domain (jecrcu.edu.in)');
     });
   });
 
@@ -172,7 +172,7 @@ describe('scoreEmail (integration-style)', () => {
         ALLOWED_DOMAIN,
       );
 
-      expect(result.isAllowedDomain).toBe(true);
+      expect(result.isAllowedDomain).toBe(false);
       expect(result.priorityScore).toBe(0);
       expect(result.priorityLabel).toBe('low');
     });

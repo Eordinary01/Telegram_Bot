@@ -53,6 +53,9 @@ importers:
       '@jecrc/queue':
         specifier: workspace:*
         version: link:../../packages/queue
+      '@jecrc/role-presets':
+        specifier: workspace:*
+        version: link:../../packages/role-presets
       '@jecrc/telegram':
         specifier: workspace:*
         version: link:../../packages/telegram
@@ -294,6 +297,15 @@ importers:
         version: 4.23.1
       typescript:
         specifier: ^5.8.3
+        version: 5.9.3
+
+  packages/role-presets:
+    devDependencies:
+      '@types/node':
+        specifier: ^22.0.0
+        version: 22.20.1
+      typescript:
+        specifier: ^5.8.0
         version: 5.9.3
 
   packages/scoring:

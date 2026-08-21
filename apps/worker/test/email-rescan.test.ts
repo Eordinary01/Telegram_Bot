@@ -17,6 +17,9 @@ const mockPrisma = {
       .fn()
       .mockResolvedValue([{ keyword: 'placement', weight: 30, category: null, matchField: 'any' }]),
   },
+  user: {
+    findUnique: vi.fn().mockResolvedValue({ allowedDomains: '' }),
+  },
 } as any;
 
 const config = {

@@ -110,13 +110,22 @@ export async function processEmailRescan(
       const deadline = extractDeadline(email.subject, email.snippet, email.bodyText ?? null);
 
       if (email.senderDomain) {
+        const user = await prisma.user.findUnique({
+          where: { id: userId },
+          select: { allowedDomains: true },
+        });
+        const effectiveAllowedDomain: string | null =
+          user?.allowedDomains && user.allowedDomains.trim().length > 0
+            ? user.allowedDomains
+            : config.ALLOWED_SENDER_DOMAIN || null;
+
         const scoringResult = await scoreEmail(
           prisma,
           userId,
           email.from,
           email.subject,
           email.snippet,
-          config.ALLOWED_SENDER_DOMAIN,
+          effectiveAllowedDomain,
           preloadedSenderRules,
           preloadedKeywordRules,
         );

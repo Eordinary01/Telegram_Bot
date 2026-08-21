@@ -197,7 +197,7 @@ export async function scoreEmail(
   fromHeader: string,
   subject: string,
   snippet: string | null,
-  allowedDomain: string,
+  allowedDomain: string | null,
   preloadedSenderRules?: SenderRuleEntry[],
   preloadedKeywordRules?: KeywordRuleEntry[],
 ): Promise<ScoringResult> {
@@ -212,20 +212,37 @@ export async function scoreEmail(
         loadKeywordRules(prisma, userId),
       ]);
 
-  // Step 3: Check base domain score for primary university domain
+  // Step 3: Domain gate — if user has allowedDomains set, only allowed senders pass
   let baseScore = 0;
   const baseReasons: string[] = [];
-  if (senderDomain && allowedDomain && allowedDomain.trim() !== '*') {
-    const allowedList = allowedDomain
-      .split(',')
-      .map((d) => d.trim().toLowerCase().replace(/^@/, ''))
-      .filter((d) => d.length > 0);
 
+  // allowedDomain can be:
+  //   null/empty → no domain restriction (all senders pass the gate)
+  //   comma-separated list e.g. "jecrcu.edu.in,abc.edu.in" → exact suffix match
+  const allowedList = allowedDomain
+    .split(',')
+    .map((d) => d.trim().toLowerCase().replace(/^@/, ''))
+    .filter((d) => d.length > 0);
+
+  if (senderDomain && allowedDomain && allowedDomain.trim().toLowerCase() !== '*') {
     if (allowedList.includes(senderDomain.toLowerCase())) {
       baseScore += 10;
-      baseReasons.push(`University domain (${senderDomain})`);
+      baseReasons.push(`Allowed domain (${senderDomain})`);
     }
+    // If sender domain does NOT match and user has a restrictive domain list,
+    // the email fails the domain gate. It still gets scored by rules but gets
+    // a LOW label and a clear isAllowedDomain: false.
   }
+
+  const isAllowedDomain = !senderDomain
+    ? false
+    : !allowedDomain || allowedDomain.trim().toLowerCase() === '*'
+      ? true
+      : allowedList.includes(senderDomain.toLowerCase());
+
+  // Early return for non-passing domain when user is domain-restricted:
+  // score by rules anyway (so user sees why it was filtered), but force LOW.
+  const permittingDomain = isAllowedDomain;
 
   // Step 4: Score against sender rules (e.g. nptel.iitm.ac.in, custom senders)
   const senderResult = scoreAgainstSenderRules(senderDomain, fromHeader, senderRules);
@@ -237,14 +254,21 @@ export async function scoreEmail(
   const totalScore = baseScore + senderResult.score + keywordResult.score;
   const allReasons = [...baseReasons, ...senderResult.reasons, ...keywordResult.reasons];
 
-  // Step 7: Classify priority
-  const label = classifyPriority(totalScore);
+  // Step 7: Classify priority — if domain gate failed for a restricted user,
+  // cap at LOW regardless of rule score.
+  let label: PriorityLabel;
+  if (!permittingDomain && allowedDomain && allowedDomain.trim().toLowerCase() !== '*') {
+    label = PRIORITY_LABELS.LOW;
+  } else {
+    label = classifyPriority(totalScore);
+  }
 
   logger.debug(
     {
       senderDomain,
       totalScore,
       label,
+      isAllowedDomain,
       reasonCount: allReasons.length,
     },
     'Email scored',
@@ -252,10 +276,9 @@ export async function scoreEmail(
 
   return {
     senderDomain,
-    isAllowedDomain: true,
+    isAllowedDomain,
     priorityScore: totalScore,
     priorityLabel: label,
-    priorityReasons:
-      allReasons.length > 0 ? allReasons : ['Standard email, no specific priority rules matched'],
+    priorityReasons: allReasons.length > 0 ? allReasons : ['Standard email, no specific priority rules matched'],
   };
 }

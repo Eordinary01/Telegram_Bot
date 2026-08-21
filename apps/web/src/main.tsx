@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 
 import './styles.css';
 import { EmailCard, type EmailData } from './components/EmailCard';
@@ -10,6 +10,7 @@ import { ThemePicker, initializeTheme } from './components/ThemePicker';
 import { ServerWakeupCard } from './components/ServerWakeupCard';
 import { LandingPage } from './components/LandingPage';
 import { WaitlistPanel } from './components/WaitlistPanel';
+import { RolePicker } from './components/RolePicker';
 import { api, getToken, setToken, clearToken, streamUrl, API_URL } from './lib/api';
 
 // Initialize theme from localStorage on app boot
@@ -253,20 +254,24 @@ function Dashboard() {
 
   // Login page — redirect to landing if not authenticated
   if (!user) {
+    // Hard redirect: if user has no role set, send to role picker before dashboard
+    if (!authLoading && user === null) {
+      // This branch is handled by useEffect below; we land here only if auth fails entirely
+    }
     return (
       <main className="login-page">
         <section className="glass-card login-card">
-          <div className="login-brand-icon">📧</div>
-          <h1 className="login-title">JECRC Mail Priority Sync</h1>
+          <div className="login-brand-icon">📬</div>
+          <h1 className="login-title">PrioritySync</h1>
           <p className="login-subtitle">
-            Smart email priority scoring & real-time Telegram alerts for Placement, Exams, and NPTEL notices.
+            Smart email priority scoring & real-time Telegram alerts. Tailored to your role.
           </p>
 
           <div className="features-grid">
             <div className="feature-item">
               <span className="feature-icon">🔒</span>
               <span className="feature-text">
-                Only <code>@jecrcu.edu.in</code> Google accounts permitted
+                Read-only Gmail access — we can't send or delete your emails
               </span>
             </div>
             <div className="feature-item">
@@ -276,9 +281,9 @@ function Dashboard() {
               </span>
             </div>
             <div className="feature-item">
-              <span className="feature-icon">🌐</span>
+              <span className="feature-icon">🎯</span>
               <span className="feature-text">
-                Scores all sources (NPTEL, Deloitte, Faculty & more)
+                Role-tuned priority rules — student, teacher, developer, and more
               </span>
             </div>
             <div className="feature-item">
@@ -311,10 +316,26 @@ function Dashboard() {
                 d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"
               />
             </svg>
-            Connect @jecrcu.edu.in Account
+            Connect with Google
           </a>
         </section>
       </main>
+    );
+  }
+
+  // Hard redirect: authenticated user with no role → role picker
+  if (user && !user.role) {
+    const navigate = useNavigate();
+    useEffect(() => {
+      navigate('/onboarding/role');
+    }, [navigate]);
+    return (
+      <div className="app-shell loading-screen">
+        <div style={{ textAlign: 'center' }}>
+          <div className="spinner" />
+          <p className="loading-text">Setting up your profile...</p>
+        </div>
+      </div>
     );
   }
 

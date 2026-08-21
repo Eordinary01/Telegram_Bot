@@ -49,6 +49,14 @@ export async function processEmailSync(
       throw new Error(`User ${userId} has no Gmail token`);
     }
 
+    // Determine the domain gate for this user:
+    //   - If user has allowedDomains set and non-empty, use that (personal restriction)
+    //   - Otherwise fall back to system-level ALLOWED_SENDER_DOMAIN (community default)
+    const effectiveAllowedDomain: string | null =
+      user.allowedDomains && user.allowedDomains.trim().length > 0
+        ? user.allowedDomains
+        : config.ALLOWED_SENDER_DOMAIN || null;
+
     let syncState = user.syncState;
     if (!syncState) {
       syncState = await prisma.syncState.upsert({
@@ -110,9 +118,18 @@ export async function processEmailSync(
     const existingMap = new Map(existingEmails.map((e) => [e.messageId, e]));
 
     // Pre-load scoring rules once for this batch to avoid per-email DB queries
-    const [preloadedSenderRules, preloadedKeywordRules] = await Promise.all([
+    const [preloadedSenderRules, preloadedKeywordRules, userDomainGate] = await Promise.all([
       loadSenderRules(prisma, userId),
       loadKeywordRules(prisma, userId),
+      (async () => {
+        const u = await prisma.user.findUnique({ where: { id: userId }, select: { allowedDomains: true } });
+        // User's personal allowed domains, or null (no restriction) if unset.
+        // Falls back to system default (config.ALLOWED_SENDER_DOMAIN) only when user has no personal override.
+        if (u?.allowedDomains && u.allowedDomains.trim() !== '') {
+          return u.allowedDomains;
+        }
+        return config.ALLOWED_SENDER_DOMAIN || null;
+      })(),
     ]);
 
     // Fetch and process each message
@@ -149,7 +166,7 @@ export async function processEmailSync(
           message.from,
           message.subject,
           message.snippet,
-          config.ALLOWED_SENDER_DOMAIN,
+          effectiveAllowedDomain,
           preloadedSenderRules,
           preloadedKeywordRules,
         );

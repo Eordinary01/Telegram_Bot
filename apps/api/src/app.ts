@@ -7,6 +7,7 @@ import type { Queue } from 'bullmq';
 import type { SyncUserEmailsJob, RescanEmailsJob } from '@jecrc/queue';
 
 import { createAuthRouter } from './routes/auth.js';
+import { createUsersRouter } from './routes/users.js';
 import { createSyncRouter } from './routes/sync.js';
 import { createWebhookRouter } from './routes/webhooks.js';
 import { createTelegramRouter } from './routes/telegram.js';
@@ -125,6 +126,13 @@ export function createApp(dependencies: AppDependencies): Express {
       config: dependencies.config,
       emailRescanQueue: dependencies.emailRescanQueue,
     }),
+  );
+
+  // Users routes (profile + role management - auth-protected)
+  app.use(
+    '/users',
+    requireAuth,
+    createUsersRouter({ prisma: dependencies.prisma, config: dependencies.config, emailRescanQueue: dependencies.emailRescanQueue }),
   );
 
   // Waitlist routes (public signup + admin-protected management)

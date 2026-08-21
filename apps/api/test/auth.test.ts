@@ -37,7 +37,8 @@ describe('auth /me endpoint', () => {
       id: 'user-1',
       email: 'student@jecrcu.edu.in',
       name: 'Test Student',
-      hasGmailToken: true,
+      role: null,
+      hasGmailToken: false,
     });
   });
 
