@@ -7,6 +7,7 @@ import { checkRedisConnection, disconnectRedis, QueueNames, parseRedisConnection
 // Force IPv4 first to prevent Windows IPv6 DNS connection timeouts to api.telegram.org
 dns.setDefaultResultOrder('ipv4first');
 import { Queue, Worker } from 'bullmq';
+import Redis from 'ioredis';
 import type { SyncUserEmailsJob, ReminderCheckJob, RescanEmailsJob } from '@jecrc/queue';
 
 import { processEmailSync } from './processors/email-sync.js';
@@ -24,13 +25,23 @@ logger.info('Worker dependencies are ready');
 
 const redisConnection = parseRedisConnection(config.REDIS_URL);
 
+// Shared blocking connection — all workers share ONE ioredis instance for bzpopmin
+// instead of each worker creating its own. Cuts blocking Redis commands by ~66%.
+const blockingConnection = new Redis({
+  host: redisConnection.host,
+  port: redisConnection.port,
+  ...(redisConnection.username ? { username: redisConnection.username } : {}),
+  ...(redisConnection.password ? { password: redisConnection.password } : {}),
+  ...(redisConnection.tls ? { tls: redisConnection.tls } : {}),
+  maxRetriesPerRequest: null,
+  enableReadyCheck: false,
+});
 
-// Shared worker options — blockingConnection uses BRPOPLPUSH instead of polling,
-// cutting idle Redis commands from ~1.5M/month to near zero.
 const workerOpts = {
   connection: redisConnection,
-  blockingConnection: true,
-  stalledInterval: 600_000, // Check stalled every 10 min (was 2 min) — saves ~18K cmds/day
+  blockingConnection,
+  stalledInterval: 900_000, // Check stalled every 15 min — saves ~12K cmds/day vs 10 min
+  lockDuration: 300_000,    // 5 min lock — prevents premature stalled re-processing
 };
 
 // Create BullMQ worker for email sync
@@ -157,6 +168,7 @@ async function shutdown(signal: string): Promise<void> {
   await reminderQueue.close();
   await emailSyncQueue.close();
   await emailRescanWorker.close();
+  await blockingConnection.quit();
   await Promise.all([disconnectPostgres(), disconnectRedis()]);
   process.exit();
 }

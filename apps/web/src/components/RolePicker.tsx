@@ -115,7 +115,7 @@ export function RolePicker() {
   useEffect(() => {
     if (completed && token) {
       const timer = setTimeout(() => {
-        window.location.href = `${API_URL}/dashboard?token=${encodeURIComponent(token)}`;
+        window.location.href = `/dashboard?token=${encodeURIComponent(token)}`;
       }, 1200);
       return () => clearTimeout(timer);
     }

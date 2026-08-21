@@ -36,7 +36,7 @@ describe('scoreEmail (integration-style)', () => {
 
       expect(result.isAllowedDomain).toBe(false);
       expect(result.priorityScore).toBe(25);
-      expect(result.priorityLabel).toBe('low');
+      expect(result.priorityLabel).toBe('high');
       expect(result.priorityReasons).toContain('NPTEL Course');
     });
 

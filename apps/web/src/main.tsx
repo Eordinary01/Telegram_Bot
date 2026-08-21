@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import ReactDOM from 'react-dom/client';
 import { BrowserRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 
@@ -15,6 +15,8 @@ import { api, getToken, setToken, clearToken, streamUrl, API_URL } from './lib/a
 
 // Initialize theme from localStorage on app boot
 initializeTheme();
+
+const PAGE_SIZE = 20;
 
 interface User {
   id: string;
@@ -63,6 +65,11 @@ function Dashboard() {
   const [showDevTools, setShowDevTools] = useState(false);
   const [showWaitlistPanel, setShowWaitlistPanel] = useState(false);
   const [cameWithToken, setCameWithToken] = useState(false);
+  const [offset, setOffset] = useState(0);
+  const [hasMore, setHasMore] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [totalEmails, setTotalEmails] = useState(0);
+  const sentinelRef = useRef<HTMLDivElement>(null);
 
   const checkUserAuth = useCallback(async () => {
     const token = getToken();
@@ -108,21 +115,33 @@ function Dashboard() {
     });
   }, [checkUserAuth]);
 
-  // Fetch emails, stats, rules, and link status
+  // Fetch first page of emails (resets pagination)
   const fetchData = useCallback(() => {
     if (!user) return;
 
-    // For ACTION_REQUIRED tab, use the dedicated endpoint
-    const fetchFn =
-      activeTab === 'ACTION_REQUIRED'
-        ? api<{ emails: EmailData[] }>('/emails/action-required')
-        : api<{ emails: EmailData[] }>(
-            `/emails?priority=${activeTab}&search=${encodeURIComponent(searchTerm)}`,
-          );
+    setOffset(0);
+    setHasMore(true);
 
-    fetchFn
-      .then((data) => setEmails(data.emails || []))
-      .catch((err) => console.error('Failed to fetch emails:', err));
+    if (activeTab === 'ACTION_REQUIRED') {
+      api<{ emails: EmailData[] }>('/emails/action-required')
+        .then((data) => {
+          setEmails(data.emails || []);
+          setTotalEmails(data.emails?.length || 0);
+          setHasMore(false);
+        })
+        .catch((err) => console.error('Failed to fetch emails:', err));
+    } else {
+      api<{ emails: EmailData[]; total: number }>(
+        `/emails?priority=${activeTab}&search=${encodeURIComponent(searchTerm)}&limit=${PAGE_SIZE}&offset=0`,
+      )
+        .then((data) => {
+          setEmails(data.emails || []);
+          setTotalEmails(data.total || 0);
+          setHasMore((data.emails?.length || 0) < (data.total || 0));
+          setOffset(data.emails?.length || 0);
+        })
+        .catch((err) => console.error('Failed to fetch emails:', err));
+    }
 
     api<Stats>('/emails/stats')
       .then((data) => setStats(data))
@@ -140,9 +159,47 @@ function Dashboard() {
       .catch(() => {});
   }, [user, activeTab, searchTerm]);
 
+  // Load next page of emails (appends to existing list)
+  const loadMore = useCallback(async () => {
+    if (!user || loadingMore || !hasMore || activeTab === 'ACTION_REQUIRED') return;
+
+    setLoadingMore(true);
+    try {
+      const data = await api<{ emails: EmailData[]; total: number }>(
+        `/emails?priority=${activeTab}&search=${encodeURIComponent(searchTerm)}&limit=${PAGE_SIZE}&offset=${offset}`,
+      );
+      const newEmails = data.emails || [];
+      setEmails((prev) => [...prev, ...newEmails]);
+      setOffset((prev) => prev + newEmails.length);
+      setHasMore(offset + newEmails.length < (data.total || 0));
+    } catch (err) {
+      console.error('Failed to load more emails:', err);
+    } finally {
+      setLoadingMore(false);
+    }
+  }, [user, activeTab, searchTerm, offset, loadingMore, hasMore]);
+
   useEffect(() => {
     fetchData();
   }, [fetchData]);
+
+  // IntersectionObserver for infinite scroll — triggers loadMore when sentinel enters viewport
+  useEffect(() => {
+    const sentinel = sentinelRef.current;
+    if (!sentinel) return;
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (entries[0]?.isIntersecting && hasMore && !loadingMore) {
+          loadMore();
+        }
+      },
+      { rootMargin: '200px' },
+    );
+
+    observer.observe(sentinel);
+    return () => observer.disconnect();
+  }, [hasMore, loadingMore, loadMore]);
 
   // Real-time SSE event listener
   useEffect(() => {
@@ -616,22 +673,42 @@ function Dashboard() {
       <div className="feed-header">
         <h2 className="feed-title">
           Inbox
-          <span className="feed-count">{emails.length}</span>
+          <span className="feed-count">
+            {activeTab === 'ACTION_REQUIRED'
+              ? emails.length
+              : `${emails.length} of ${totalEmails}`}
+          </span>
         </h2>
       </div>
 
       {/* Email Feed */}
       <section className="feed-container">
         {emails.length > 0 ? (
-          emails.map((email, index) => (
-            <div
-              key={email.id}
-              className="email-card-enter"
-              style={{ animationDelay: `${Math.min(index * 40, 300)}ms` }}
-            >
-              <EmailCard email={email} onAcknowledge={() => fetchData()} />
-            </div>
-          ))
+          <>
+            {emails.map((email, index) => (
+              <div
+                key={email.id}
+                className="email-card-enter"
+                style={{ animationDelay: `${Math.min(index * 40, 300)}ms` }}
+              >
+                <EmailCard
+                  email={email}
+                  onAcknowledge={() => {
+                    setEmails((prev) =>
+                      prev.map((e) =>
+                        e.id === email.id ? { ...e, acknowledgedAt: new Date().toISOString() } : e,
+                      ),
+                    );
+                  }}
+                />
+              </div>
+            ))}
+            {hasMore && activeTab !== 'ACTION_REQUIRED' && (
+              <div ref={sentinelRef} className="feed-sentinel">
+                {loadingMore && <div className="spinner" />}
+              </div>
+            )}
+          </>
         ) : (
           <div className="glass-card empty-state">
             <div className="empty-icon">{userRulesCount < 3 ? '⚙️' : '📭'}</div>

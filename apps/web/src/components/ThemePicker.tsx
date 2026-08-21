@@ -34,6 +34,7 @@ interface BgPreset {
 }
 
 const BG_PRESETS: BgPreset[] = [
+  // ── Dark themes ──
   {
     key: 'midnight',
     label: 'Midnight',
@@ -124,6 +125,82 @@ const BG_PRESETS: BgPreset[] = [
     textTertiary: '#666666',
     swatch: '#000000',
   },
+  // ── Light themes ──
+  {
+    key: 'snow',
+    label: 'Snow',
+    bgDark: '#f8fafc',
+    bgSurface: 'rgba(255, 255, 255, 0.85)',
+    bgSurfaceHover: 'rgba(241, 245, 249, 0.95)',
+    bgElevated: 'rgba(255, 255, 255, 0.92)',
+    bgInset: 'rgba(226, 232, 240, 0.5)',
+    borderSubtle: 'rgba(0, 0, 0, 0.05)',
+    borderDefault: 'rgba(0, 0, 0, 0.08)',
+    textPrimary: '#0f172a',
+    textSecondary: '#475569',
+    textTertiary: '#94a3b8',
+    swatch: '#f8fafc',
+  },
+  {
+    key: 'cloud',
+    label: 'Cloud',
+    bgDark: '#f1f5f9',
+    bgSurface: 'rgba(255, 255, 255, 0.8)',
+    bgSurfaceHover: 'rgba(241, 245, 249, 0.92)',
+    bgElevated: 'rgba(255, 255, 255, 0.88)',
+    bgInset: 'rgba(203, 213, 225, 0.4)',
+    borderSubtle: 'rgba(0, 0, 0, 0.04)',
+    borderDefault: 'rgba(0, 0, 0, 0.07)',
+    textPrimary: '#1e293b',
+    textSecondary: '#64748b',
+    textTertiary: '#94a3b8',
+    swatch: '#e2e8f0',
+  },
+  {
+    key: 'cream',
+    label: 'Cream',
+    bgDark: '#fefcf3',
+    bgSurface: 'rgba(255, 253, 245, 0.85)',
+    bgSurfaceHover: 'rgba(254, 251, 235, 0.95)',
+    bgElevated: 'rgba(255, 253, 245, 0.92)',
+    bgInset: 'rgba(245, 238, 210, 0.5)',
+    borderSubtle: 'rgba(120, 100, 60, 0.06)',
+    borderDefault: 'rgba(120, 100, 60, 0.1)',
+    textPrimary: '#3d2e10',
+    textSecondary: '#7a6a48',
+    textTertiary: '#a89870',
+    swatch: '#fef9e7',
+  },
+  {
+    key: 'mist',
+    label: 'Mist',
+    bgDark: '#eef2f7',
+    bgSurface: 'rgba(240, 245, 252, 0.82)',
+    bgSurfaceHover: 'rgba(226, 235, 248, 0.92)',
+    bgElevated: 'rgba(240, 245, 252, 0.9)',
+    bgInset: 'rgba(191, 210, 235, 0.4)',
+    borderSubtle: 'rgba(30, 60, 110, 0.05)',
+    borderDefault: 'rgba(30, 60, 110, 0.08)',
+    textPrimary: '#0c1929',
+    textSecondary: '#425e80',
+    textTertiary: '#7a96b8',
+    swatch: '#dde6f0',
+  },
+  {
+    key: 'linen',
+    label: 'Linen',
+    bgDark: '#faf5f0',
+    bgSurface: 'rgba(252, 248, 242, 0.85)',
+    bgSurfaceHover: 'rgba(245, 238, 228, 0.95)',
+    bgElevated: 'rgba(252, 248, 242, 0.92)',
+    bgInset: 'rgba(230, 218, 200, 0.45)',
+    borderSubtle: 'rgba(100, 70, 40, 0.05)',
+    borderDefault: 'rgba(100, 70, 40, 0.09)',
+    textPrimary: '#2c1e0e',
+    textSecondary: '#7a6248',
+    textTertiary: '#a89070',
+    swatch: '#f0e6d8',
+  },
 ];
 
 function hexToRgb(hex: string): string {
@@ -155,6 +232,38 @@ function applyBgTheme(bgKey: string) {
   root.style.setProperty('--text-primary', preset.textPrimary);
   root.style.setProperty('--text-secondary', preset.textSecondary);
   root.style.setProperty('--text-tertiary', preset.textTertiary);
+
+  // Detect light vs dark by checking if the bg is light (high luminance)
+  const hex = preset.bgDark.replace('#', '');
+  const r = parseInt(hex.substring(0, 2), 16);
+  const g = parseInt(hex.substring(2, 4), 16);
+  const b = parseInt(hex.substring(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  const isLight = luminance > 0.6;
+
+  root.style.setProperty('color-scheme', isLight ? 'light' : 'dark');
+  root.style.setProperty('--shadow-sm', isLight
+    ? '0 1px 3px rgba(0, 0, 0, 0.08)'
+    : '0 2px 8px rgba(0, 0, 0, 0.3)');
+  root.style.setProperty('--shadow-md', isLight
+    ? '0 4px 12px -2px rgba(0, 0, 0, 0.08), 0 2px 4px rgba(0, 0, 0, 0.04)'
+    : '0 8px 24px -6px rgba(0, 0, 0, 0.45)');
+  root.style.setProperty('--shadow-lg', isLight
+    ? '0 8px 24px -4px rgba(0, 0, 0, 0.1), 0 4px 8px rgba(0, 0, 0, 0.04)'
+    : '0 16px 48px -12px rgba(0, 0, 0, 0.55)');
+  root.style.setProperty('--scrollbar-track', isLight ? 'rgba(0,0,0,0.03)' : 'rgba(255,255,255,0.03)');
+  root.style.setProperty('--scrollbar-thumb', isLight ? 'rgba(0,0,0,0.12)' : 'rgba(255,255,255,0.1)');
+
+  // Priority colors — darker for light themes, lighter for dark themes
+  root.style.setProperty('--priority-high-bg', isLight ? 'rgba(239, 68, 68, 0.1)' : 'rgba(239, 68, 68, 0.12)');
+  root.style.setProperty('--priority-high-border', isLight ? 'rgba(239, 68, 68, 0.25)' : 'rgba(239, 68, 68, 0.3)');
+  root.style.setProperty('--priority-high-text', isLight ? '#dc2626' : '#fca5a5');
+  root.style.setProperty('--priority-med-bg', isLight ? 'rgba(245, 158, 11, 0.1)' : 'rgba(245, 158, 11, 0.12)');
+  root.style.setProperty('--priority-med-border', isLight ? 'rgba(245, 158, 11, 0.25)' : 'rgba(245, 158, 11, 0.3)');
+  root.style.setProperty('--priority-med-text', isLight ? '#d97706' : '#fcd34d');
+  root.style.setProperty('--priority-low-bg', isLight ? 'rgba(100, 116, 139, 0.08)' : 'rgba(100, 116, 139, 0.1)');
+  root.style.setProperty('--priority-low-border', isLight ? 'rgba(100, 116, 139, 0.15)' : 'rgba(100, 116, 139, 0.2)');
+  root.style.setProperty('--priority-low-text', isLight ? '#475569' : '#cbd5e1');
 }
 
 function applyTheme(theme: ThemeColors) {
@@ -268,7 +377,7 @@ export const ThemePicker: React.FC<ThemePickerProps> = ({ isOpen, onClose }) => 
       <div className="theme-divider" />
 
       {/* Background Theme Section */}
-      <div className="theme-picker-title" style={{ marginTop: '0.25rem' }}>🌑 Background</div>
+      <div className="theme-picker-title" style={{ marginTop: '0.25rem' }}>🎨 Background</div>
 
       <div className="theme-bg-presets">
         {BG_PRESETS.map((bg) => (

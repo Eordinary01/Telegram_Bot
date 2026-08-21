@@ -8,6 +8,24 @@ import { eventBroadcaster, type EmailEvent } from '../events.js';
 
 const logger = getLogger('emails-routes');
 
+const PRIORITY_TIER_ORDER: Record<string, number> = {
+  high: 0,
+  medium: 1,
+  low: 2,
+};
+
+function sortByPriorityTier<
+  T extends { priorityLabel: string | null; priorityScore: number; receivedAt: Date | string },
+>(items: T[]): T[] {
+  return items.sort((a, b) => {
+    const tierA = PRIORITY_TIER_ORDER[a.priorityLabel?.toLowerCase() ?? ''] ?? 3;
+    const tierB = PRIORITY_TIER_ORDER[b.priorityLabel?.toLowerCase() ?? ''] ?? 3;
+    if (tierA !== tierB) return tierA - tierB;
+    if (b.priorityScore !== a.priorityScore) return b.priorityScore - a.priorityScore;
+    return new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime();
+  });
+}
+
 // Simple in-memory cache for stats responses
 interface CacheEntry {
   data: Record<string, unknown>;
@@ -73,7 +91,7 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
       const [emails, total] = await Promise.all([
         prisma.email.findMany({
           where,
-          orderBy: { receivedAt: 'desc' },
+          orderBy: [{ priorityScore: 'desc' }, { receivedAt: 'desc' }],
           take,
           skip,
           select: {
@@ -102,6 +120,8 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
         }),
         prisma.email.count({ where }),
       ]);
+
+      sortByPriorityTier(emails);
 
       return res.status(200).json({
         emails,
@@ -488,8 +508,10 @@ export function createEmailsRouter(dependencies: EmailsDependencies): Router {
           reminderCount: true,
           snoozedUntil: true,
         },
-        orderBy: { receivedAt: 'desc' },
+        orderBy: [{ priorityScore: 'desc' }, { receivedAt: 'desc' }],
       });
+
+      sortByPriorityTier(emails);
 
       return res.status(200).json({ emails, total: emails.length });
     } catch (error) {

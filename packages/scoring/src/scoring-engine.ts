@@ -256,11 +256,16 @@ export async function scoreEmail(
   const totalScore = baseScore + senderResult.score + keywordResult.score;
   const allReasons = [...baseReasons, ...senderResult.reasons, ...keywordResult.reasons];
 
-  // Step 7: Classify priority — if domain gate failed for a restricted user,
-  // cap at LOW regardless of rule score.
+  // Step 7: Classify priority.
+  // If the domain gate failed AND no user rules matched, force LOW and cap score.
+  // But if the user has explicitly defined rules that matched (sender or keyword),
+  // those rules take precedence — the user intended those emails to be prioritized.
+  const hasUserRules = senderResult.score > 0 || keywordResult.score > 0;
+  let finalScore = totalScore;
   let label: PriorityLabel;
-  if (!permittingDomain && allowedDomain && allowedDomain.trim().toLowerCase() !== '*') {
+  if (!permittingDomain && allowedDomain && allowedDomain.trim().toLowerCase() !== '*' && !hasUserRules) {
     label = PRIORITY_LABELS.LOW;
+    finalScore = Math.min(totalScore, 9);
   } else {
     label = classifyPriority(totalScore);
   }
@@ -268,7 +273,7 @@ export async function scoreEmail(
   logger.debug(
     {
       senderDomain,
-      totalScore,
+      finalScore,
       label,
       isAllowedDomain,
       reasonCount: allReasons.length,
@@ -279,7 +284,7 @@ export async function scoreEmail(
   return {
     senderDomain,
     isAllowedDomain,
-    priorityScore: totalScore,
+    priorityScore: finalScore,
     priorityLabel: label,
     priorityReasons: allReasons.length > 0 ? allReasons : ['Standard email, no specific priority rules matched'],
   };

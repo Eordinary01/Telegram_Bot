@@ -7,6 +7,24 @@ import type { ReminderCheckJob } from '@jecrc/queue';
 
 const logger = getLogger('reminder-check-processor');
 
+const PRIORITY_TIER_ORDER: Record<string, number> = {
+  high: 0,
+  medium: 1,
+  low: 2,
+};
+
+function sortByPriorityTier<
+  T extends { priorityLabel: string | null; priorityScore: number; receivedAt: Date | string },
+>(items: T[]): T[] {
+  return items.sort((a, b) => {
+    const tierA = PRIORITY_TIER_ORDER[a.priorityLabel?.toLowerCase() ?? ''] ?? 3;
+    const tierB = PRIORITY_TIER_ORDER[b.priorityLabel?.toLowerCase() ?? ''] ?? 3;
+    if (tierA !== tierB) return tierA - tierB;
+    if (b.priorityScore !== a.priorityScore) return b.priorityScore - a.priorityScore;
+    return new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime();
+  });
+}
+
 /**
  * Escalation intervals (Production):
  * - reminderCount 0 → first reminder after 2 hours
@@ -60,6 +78,8 @@ export async function processReminderCheck(
       },
       orderBy: { receivedAt: 'desc' },
     });
+
+    sortByPriorityTier(candidateEmails);
 
     logger.info(
       { candidateCount: candidateEmails.length },

@@ -85,4 +85,64 @@ describe('emails endpoints', () => {
       lastSyncAt: '2026-07-25T12:00:00.000Z',
     });
   });
+
+  it('sorts emails by priority tier first, then by score', async () => {
+    const now = new Date();
+    const mockEmails = [
+      {
+        id: '1',
+        userId: 'user-1',
+        messageId: 'msg-1',
+        subject: 'Low score but labeled LOW',
+        from: 'spam@example.com',
+        priorityLabel: 'low',
+        priorityScore: 5,
+        receivedAt: new Date(now.getTime() - 1000).toISOString(),
+      },
+      {
+        id: '2',
+        userId: 'user-1',
+        messageId: 'msg-2',
+        subject: 'High score but forced LOW by domain gate',
+        from: 'urgent@gmail.com',
+        priorityLabel: 'low',
+        priorityScore: 45,
+        receivedAt: new Date(now.getTime() - 2000).toISOString(),
+      },
+      {
+        id: '3',
+        userId: 'user-1',
+        messageId: 'msg-3',
+        subject: 'Genuine HIGH priority',
+        from: 'placement@jecrcu.edu.in',
+        priorityLabel: 'high',
+        priorityScore: 40,
+        receivedAt: new Date(now.getTime() - 3000).toISOString(),
+      },
+      {
+        id: '4',
+        userId: 'user-1',
+        messageId: 'msg-4',
+        subject: 'MEDIUM priority',
+        from: 'faculty@jecrcu.edu.in',
+        priorityLabel: 'medium',
+        priorityScore: 15,
+        receivedAt: new Date(now.getTime() - 4000).toISOString(),
+      },
+    ];
+
+    mockPrisma.email.findMany.mockResolvedValue(mockEmails);
+    mockPrisma.email.count.mockResolvedValue(4);
+
+    const app = createApp(makeTestDeps({ prisma: mockPrisma }));
+    const token = createTestToken('user-1');
+
+    const response = await request(app)
+      .get('/emails?priority=ALL')
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(response.status).toBe(200);
+    const labels = response.body.emails.map((e: { priorityLabel: string }) => e.priorityLabel);
+    expect(labels).toEqual(['high', 'medium', 'low', 'low']);
+  });
 });

@@ -7,6 +7,24 @@ import type { Context } from 'telegraf';
 
 const logger = getLogger('telegram-bot');
 
+const PRIORITY_TIER_ORDER: Record<string, number> = {
+  high: 0,
+  medium: 1,
+  low: 2,
+};
+
+function sortByPriorityTier<
+  T extends { priorityLabel: string | null; priorityScore: number; receivedAt: Date | string },
+>(items: T[]): T[] {
+  return items.sort((a, b) => {
+    const tierA = PRIORITY_TIER_ORDER[a.priorityLabel?.toLowerCase() ?? ''] ?? 3;
+    const tierB = PRIORITY_TIER_ORDER[b.priorityLabel?.toLowerCase() ?? ''] ?? 3;
+    if (tierA !== tierB) return tierA - tierB;
+    if (b.priorityScore !== a.priorityScore) return b.priorityScore - a.priorityScore;
+    return new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime();
+  });
+}
+
 /**
  * Creates and configures a Telegram bot with commands:
  * - /start <code> : Link Telegram account
@@ -152,6 +170,8 @@ export function configureBot(
         take: 5,
       });
 
+      sortByPriorityTier(recentEmails);
+
       if (recentEmails.length === 0) {
         await ctx.reply('📭 No emails synced yet.');
         return;
@@ -199,6 +219,8 @@ export function configureBot(
         orderBy: { receivedAt: 'desc' },
         take: 50,
       });
+
+      sortByPriorityTier(emails);
 
       const deadlineList = emails
         .map((e) => {
@@ -278,6 +300,8 @@ export function configureBot(
         orderBy: { receivedAt: 'desc' },
         take: 5,
       });
+
+      sortByPriorityTier(highPriority);
 
       const unreadCount = await prisma.email.count({
         where: { userId: link.userId, isUnread: true },
