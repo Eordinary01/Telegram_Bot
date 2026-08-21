@@ -3,44 +3,43 @@ name: CI/CD Pipeline
 on:
   push:
     branches: [main]
-  
 
 jobs:
   build:
-    name: Build & Test
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: pnpm/action-setup@v4
         with:
-          node-version: 20
-          cache: 'npm'
+          version: 10.13.1
 
-      - name: Install dependencies
-        run: npm ci
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: 'pnpm'
 
-      - name: Run linter
-        run: npm run lint --if-present
+      - run: pnpm install
 
-      - name: Run tests
-        run: npm test --if-present
+      - name: Lint
+        run: pnpm run lint
+
+      - name: Run Tests (Vitest)
+        run: pnpm test
+
+      - name: Typecheck
+        run: pnpm run typecheck
 
       - name: Build
-        run: npm run build --if-present
+        run: pnpm run build
 
   deploy:
-    name: Deploy to Production
     needs: build
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
-
     steps:
       - uses: actions/checkout@v4
-
-      - name: Deploy to Render
-        uses: render-examples/render-action@main
+      - uses: render-examples/render-action@main
         with:
           service-id: ${{ secrets.RENDER_SERVICE_ID }}
           api-key: ${{ secrets.RENDER_API_KEY }}
